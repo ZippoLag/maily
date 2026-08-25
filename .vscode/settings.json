@@ -1,34 +1,43 @@
 {
     "workbench.colorCustomizations": {
-        "activityBar.activeBackground": "#ee9f8d",
-        "activityBar.background": "#ee9f8d",
+        "activityBar.activeBackground": "#5ec5bc",
+        "activityBar.background": "#5ec5bc",
         "activityBar.foreground": "#15202b",
         "activityBar.inactiveForeground": "#15202b99",
-        "activityBarBadge.background": "#158b2b",
+        "activityBarBadge.background": "#b144bb",
         "activityBarBadge.foreground": "#e7e7e7",
-        "activityBarTop.activeBackground": "#ee9f8d",
-        "activityBarTop.background": "#ee9f8d",
+        "activityBarTop.activeBackground": "#5ec5bc",
+        "activityBarTop.background": "#5ec5bc",
         "activityBarTop.foreground": "#15202b",
         "activityBarTop.inactiveForeground": "#15202b99",
         "commandCenter.border": "#15202b99",
         "commandCenter.foreground": "#15202b",
-        "sash.hoverBorder": "#ee9f8d",
-        "statusBar.background": "#e87a60",
-        "statusBar.debuggingBackground": "#e87a60",
+        "sash.hoverBorder": "#5ec5bc",
+        "statusBar.background": "#40b0a7",
+        "statusBar.debuggingBackground": "#40b0a7",
         "statusBar.debuggingForeground": "#15202b",
         "statusBar.foreground": "#15202b",
-        "statusBarItem.hoverBackground": "#e25533",
-        "statusBarItem.remoteBackground": "#90efa2",
+        "statusBarItem.hoverBackground": "#328b83",
+        "statusBarItem.remoteBackground": "#f5e8f6",
         "statusBarItem.remoteForeground": "#15202b",
-        "titleBar.activeBackground": "#e87a60",
+        "titleBar.activeBackground": "#40b0a7",
         "titleBar.activeForeground": "#15202b",
-        "titleBar.inactiveBackground": "#e87a6099",
+        "titleBar.inactiveBackground": "#40b0a799",
         "titleBar.inactiveForeground": "#15202b99"
     },
     "peacock.color": "#40b0a7",
     "workbench.experimental.modernUI": false,
     "peacock.remoteColor": "#e87a60",
     "chat.tools.terminal.autoApprove": {
-        "pnpm": true
+        "pnpm": true,
+        "pnpx": true,
+        "/^python3 -m pytest -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "python3": true,
+        "/usr/local/bin/python": true,
+        "command": true,
+        "pytest": true
     }
 }

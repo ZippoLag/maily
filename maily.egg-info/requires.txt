@@ -1,0 +1,13 @@
+
+[dev]
+pytest>=8.3.0
+
+[gmail]
+google-api-python-client>=2.150.0
+google-auth-oauthlib>=1.2.1
+
+[secure]
+keyring>=25.5.0
+
+[tui]
+textual>=0.80.0

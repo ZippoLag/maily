@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from dataclasses import dataclass
+from typing import Protocol
+
+from .models import ClassificationResult, EmailMessage
+
+
+class InferenceProvider(Protocol):
+    def classify(self, message: EmailMessage, categories: tuple[str, ...]) -> list[str]: ...
+
+
+@dataclass(frozen=True)
+class Rule:
+    category: str
+    patterns: tuple[str, ...]
+    fields: tuple[str, ...] = ("subject", "body", "sender_email")
+
+    def matches(self, message: EmailMessage) -> bool:
+        values = [getattr(message, field, "") for field in self.fields]
+        haystack = "\n".join(values).lower()
+        return any(re.search(pattern, haystack, re.IGNORECASE) for pattern in self.patterns)
+
+
+DEFAULT_RULES = (
+    Rule("Action Required", (r"verify", r"verification code", r"expires?", r"due date", r"payment required")),
+    Rule("Job search", (r"job alert", r"career", r"vacancy", r"hiring", r"recruit")),
+    Rule("Newsletters - technical", (r"unsubscribe", r"developer", r"software", r"release notes")),
+)
+
+
+def fingerprint(message: EmailMessage, categories: tuple[str, ...], rules: tuple[Rule, ...]) -> str:
+    payload = {
+        "message": message.as_dict(),
+        "categories": categories,
+        "rules": [rule.__dict__ for rule in rules],
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+class Classifier:
+    def __init__(self, categories: tuple[str, ...], provider: InferenceProvider | None = None, rules: tuple[Rule, ...] = DEFAULT_RULES):
+        self.categories = categories
+        self.provider = provider
+        self.rules = rules
+
+    def classify(self, message: EmailMessage) -> tuple[ClassificationResult, str]:
+        matched = list(dict.fromkeys(rule.category for rule in self.rules if rule.matches(message)))
+        if matched:
+            return ClassificationResult(matched, "deterministic"), fingerprint(message, self.categories, self.rules)
+        if self.provider is None:
+            return ClassificationResult(["Other"], "fallback", degraded=True, error="Inference provider unavailable"), fingerprint(message, self.categories, self.rules)
+        try:
+            inferred = [category for category in self.provider.classify(message, self.categories) if category in self.categories]
+            return ClassificationResult(list(dict.fromkeys(inferred or ["Other"])), "ollama"), fingerprint(message, self.categories, self.rules)
+        except Exception as exc:
+            return ClassificationResult(["Other"], "fallback", degraded=True, error=str(exc)), fingerprint(message, self.categories, self.rules)

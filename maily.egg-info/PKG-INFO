@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: maily
+Version: 0.1.0
+Summary: A local Gmail triage assistant
+Requires-Python: >=3.11
+Provides-Extra: gmail
+Requires-Dist: google-api-python-client>=2.150.0; extra == "gmail"
+Requires-Dist: google-auth-oauthlib>=1.2.1; extra == "gmail"
+Provides-Extra: secure
+Requires-Dist: keyring>=25.5.0; extra == "secure"
+Provides-Extra: tui
+Requires-Dist: textual>=0.80.0; extra == "tui"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
