@@ -1,0 +1,17 @@
+
+# openlore analysis artifacts
+.openlore/
+.pnpm-store/v11/index.db
+.pnpm-store/v11/files/60/de10c3f07f95a40da506794aa2cc21bb0f66ae2a0896be9e72d95a9b184307b73868a16caad9d35ac42e32a463cdfa7201ce4d1dd0dfc22cce4788fda67169
+.pnpm-store/v11/files/b1/33fbaec24c8a4518c9e4ed6957a6d5ec6bbb010c38099825837753557527fa783cea9861789ced03301692ec418efe8e5a41beaad8a257756c7ff774be22d8
+.pnpm-store/v11/files/d7/3cf20af261191493c289384d886cdb5fd86fad6bcb4b6caf8e4b8b5332d4bcbd522244c0b950592f26b44eccf250d0ccb21dd2968b5abe33f41608386c0297
+node_modules/.modules.yaml
+node_modules/.package-map.json
+node_modules/.pnpm-workspace-state-v1.json
+node_modules/openspec
+node_modules/.pnpm/lock.yaml
+node_modules/.pnpm/openspec@0.0.0/node_modules/openspec/LICENSE
+node_modules/.pnpm/openspec@0.0.0/node_modules/openspec/package.json
+node_modules/.pnpm/openspec@0.0.0/node_modules/openspec/README.md
+pnpm-lock.yaml
+package.json
