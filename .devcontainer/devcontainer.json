@@ -7,6 +7,17 @@
 	"features": {
 		"ghcr.io/devcontainers/features/node:2": {},
 		"ghcr.io/devcontainers-extra/features/pnpm:2": {}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"mistralai.mistral-vibe-code",
+				"ms-python.vscode-pylance",
+				"ms-python.python",
+				"ms-python.debugpy",
+				"ms-python.vscode-python-envs"
+			]
+		}
 	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
