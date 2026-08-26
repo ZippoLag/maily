@@ -155,6 +155,37 @@ class Database:
         with self.transaction() as connection:
             connection.execute("DELETE FROM user_category_overrides WHERE message_id = ?", (message_id,))
 
+    def get_rule_suggestions(self, status: str | None = None) -> list[sqlite3.Row]:
+        if status is None:
+            return self.connection.execute(
+                "SELECT * FROM learned_rule_suggestions ORDER BY id"
+            ).fetchall()
+        return self.connection.execute(
+            "SELECT * FROM learned_rule_suggestions WHERE status = ? ORDER BY id", (status,)
+        ).fetchall()
+
+    def add_rule_suggestion(
+        self,
+        pattern: str,
+        category: str,
+        source_message_id: str | None = None,
+        confidence: float = 0.0,
+    ) -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                """INSERT INTO learned_rule_suggestions(
+                   pattern, category, source_message_id, confidence, status, created_at)
+                   VALUES (?, ?, ?, ?, 'pending', ?)""",
+                (pattern, category, source_message_id, confidence, iso_now()),
+            )
+
+    def update_rule_suggestion_status(self, suggestion_id: int, status: str) -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                "UPDATE learned_rule_suggestions SET status = ? WHERE id = ?",
+                (status, suggestion_id),
+            )
+
     def upsert_messages(self, messages, classifications: dict[str, tuple[list[str], str, str, bool]]) -> None:
         with self.transaction() as connection:
             for message in messages:

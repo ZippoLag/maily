@@ -79,6 +79,31 @@ def test_user_override_delete(tmp_path: Path):
     database.close()
 
 
+def test_rule_suggestion_lifecycle(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    assert database.get_rule_suggestions() == []
+    database.add_rule_suggestion("newsletter", "Newsletters - technical", confidence=0.8)
+    suggestions = database.get_rule_suggestions()
+    assert len(suggestions) == 1
+    assert suggestions[0]["pattern"] == "newsletter"
+    assert suggestions[0]["category"] == "Newsletters - technical"
+    assert suggestions[0]["status"] == "pending"
+    suggestion_id = suggestions[0]["id"]
+    database.update_rule_suggestion_status(suggestion_id, "accepted")
+    updated = database.get_rule_suggestions()
+    assert updated[0]["status"] == "accepted"
+    database.close()
+
+
+def test_get_rule_suggestions_filters_by_status(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    database.add_rule_suggestion("newsletter", "Newsletters - technical", confidence=0.8)
+    database.add_rule_suggestion("invoice", "Action Required", confidence=0.6)
+    assert len(database.get_rule_suggestions(status="pending")) == 2
+    assert database.get_rule_suggestions(status="accepted") == []
+    database.close()
+
+
 def test_config_parses_inference_enabled_default(tmp_path: Path):
     config = load_config(tmp_path / ".maily")
     assert config.inference_enabled == False
