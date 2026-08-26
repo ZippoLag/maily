@@ -1,17 +1,17 @@
 ## 1. Config and Rule Loading
 
-- [ ] 1.1 Add rule parsing to config.py - parse `[classification.rules]` table from TOML and convert to Rule objects, verify with test that user rules are loaded and combined with defaults
-- [ ] 1.2 Add rule validation in config.py - validate regex patterns on config load, verify invalid patterns raise clear errors
-- [ ] 1.3 Update _write_default_config to include commented examples of user rules, verify default config includes examples
-- [ ] 1.4 Add Rule.to_dict() and Rule.from_dict() methods for serialization, verify round-trip conversion works
+- [x] 1.1 Add rule parsing to config.py - parse `[classification.rules]` table from TOML and convert to Rule objects, verify with test that user rules are loaded and combined with defaults
+- [x] 1.2 Add rule validation in config.py - validate regex patterns on config load, verify invalid patterns raise clear errors
+- [x] 1.3 Update _write_default_config to include commented examples of user rules, verify default config includes examples
+- [x] 1.4 Add Rule.to_dict() and Rule.from_dict() methods for serialization, verify round-trip conversion works
 
 ## 2. Classifier Enhancements
 
-- [ ] 2.1 Update Classifier.__init__ to accept rule loading from config, verify Classifier can be instantiated with user rules
+- [x] 2.1 Update Classifier.__init__ to accept rule loading from config, verify Classifier can be instantiated with user rules
 - [ ] 2.2 Modify Rule.matches() to track which specific patterns matched, verify matched patterns are recorded
 - [ ] 2.3 Update ClassificationResult to include matched_rules field, verify rules are tracked in results
 - [ ] 2.4 Add primary category selection logic - first matched rule or first user category, verify with test that primary is selected correctly
-- [ ] 2.5 Update classifier.classify() to separate rule matching from inference, verify deterministic rules run before inference
+- [x] 2.5 Update classifier.classify() to separate rule matching from inference, verify deterministic rules run before inference
 
 ## 3. Database Schema Updates
 

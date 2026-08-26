@@ -3,33 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
 from typing import Protocol
 
+from .config import DEFAULT_RULES, Rule
 from .models import ClassificationResult, EmailMessage
 
 
 class InferenceProvider(Protocol):
     def classify(self, message: EmailMessage, categories: tuple[str, ...]) -> list[str]: ...
-
-
-@dataclass(frozen=True)
-class Rule:
-    category: str
-    patterns: tuple[str, ...]
-    fields: tuple[str, ...] = ("subject", "body", "sender_email")
-
-    def matches(self, message: EmailMessage) -> bool:
-        values = [getattr(message, field, "") for field in self.fields]
-        haystack = "\n".join(values).lower()
-        return any(re.search(pattern, haystack, re.IGNORECASE) for pattern in self.patterns)
-
-
-DEFAULT_RULES = (
-    Rule("Action Required", (r"verify", r"verification code", r"expires?", r"due date", r"payment required")),
-    Rule("Job search", (r"job alert", r"career", r"vacancy", r"hiring", r"recruit")),
-    Rule("Newsletters - technical", (r"unsubscribe", r"developer", r"software", r"release notes")),
-)
 
 
 def fingerprint(message: EmailMessage, categories: tuple[str, ...], rules: tuple[Rule, ...]) -> str:
@@ -42,10 +23,10 @@ def fingerprint(message: EmailMessage, categories: tuple[str, ...], rules: tuple
 
 
 class Classifier:
-    def __init__(self, categories: tuple[str, ...], provider: InferenceProvider | None = None, rules: tuple[Rule, ...] = DEFAULT_RULES, inference_enabled: bool = False):
+    def __init__(self, categories: tuple[str, ...], provider: InferenceProvider | None = None, rules: tuple[Rule, ...] | None = None, inference_enabled: bool = False):
         self.categories = categories
         self.provider = provider
-        self.rules = rules
+        self.rules = rules if rules is not None else DEFAULT_RULES
         self.inference_enabled = inference_enabled
 
     def classify(self, message: EmailMessage) -> tuple[ClassificationResult, str]:

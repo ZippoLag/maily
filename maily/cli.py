@@ -57,7 +57,7 @@ def run_scan(config, as_json: bool) -> int:
             raise ValueError("Configure gmail.oauth_client_file in ~/.maily/config.toml or run maily init --oauth-client-file PATH")
         gmail_client, account = authenticate(client_file, database, credentials)
         provider = OllamaProvider(config.ollama_url, config.ollama_model, config.ollama_timeout_seconds)
-        result = scan(gmail_client, database, Classifier(config.categories, provider, inference_enabled=config.inference_enabled), *config.local_today_bounds())
+        result = scan(gmail_client, database, Classifier(config.categories, provider, rules=config.rules, inference_enabled=config.inference_enabled), *config.local_today_bounds())
         payload = result.as_dict()
         payload["account"] = account
     except (CredentialStoreError, ValueError, RuntimeError) as exc:
