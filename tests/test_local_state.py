@@ -105,6 +105,30 @@ def test_get_rule_suggestions_filters_by_status(tmp_path: Path):
     database.close()
 
 
+def test_categorized_messages_applies_user_overrides(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    seed_message(database, "m1")
+    seed_message(database, "m2")
+    database.connection.execute(
+        "INSERT INTO classifications(message_id, category, source, fingerprint, cached) "
+        "VALUES ('m1', 'Action Required', 'deterministic', 'fp', 0)"
+    )
+    database.connection.execute(
+        "INSERT INTO classifications(message_id, category, source, fingerprint, cached) "
+        "VALUES ('m2', 'Work', 'deterministic', 'fp', 0)"
+    )
+    database.connection.commit()
+    database.set_user_override("m1", ["Personal", "Work"])
+    rows = database.categorized_messages()
+    m1_rows = [row for row in rows if row["id"] == "m1"]
+    assert {row["category"] for row in m1_rows} == {"Personal", "Work"}
+    assert all(row["categories"] == ["Personal", "Work"] for row in m1_rows)
+    m2_rows = [row for row in rows if row["id"] == "m2"]
+    assert [row["category"] for row in m2_rows] == ["Work"]
+    database.close()
+
+
 def test_cached_classification_applies_user_override(tmp_path: Path):
     database = Database(tmp_path / "maily.sqlite3")
     database.seed_categories(tuple(DEFAULT_CATEGORIES))

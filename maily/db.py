@@ -242,13 +242,26 @@ class Database:
         return categories, source
 
     def categorized_messages(self):
-        return self.connection.execute(
+        rows = self.connection.execute(
                 """SELECT m.id, m.subject, m.sender_name, m.sender_email, m.sender_domain,
                     m.received_at, m.importance, t.first_received_at, t.last_received_at, c.category
                     FROM messages m JOIN threads t ON t.id = m.thread_id
                     JOIN classifications c ON c.message_id = m.id
                ORDER BY m.received_at DESC"""
         ).fetchall()
+        by_message: dict[str, list[dict]] = {}
+        for row in rows:
+            by_message.setdefault(row["id"], []).append(dict(row))
+        result: list[dict] = []
+        for message_id, message_rows in by_message.items():
+            override = self.get_user_override(message_id)
+            categories = override if override is not None else [r["category"] for r in message_rows]
+            for category in categories:
+                row = dict(message_rows[0])
+                row["category"] = category
+                row["categories"] = categories
+                result.append(row)
+        return result
 
     def get_summary(self, message_id: str, fingerprint: str) -> str | None:
         """Get cached summary for a message if it exists."""
