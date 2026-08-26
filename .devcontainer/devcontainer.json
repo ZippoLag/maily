@@ -6,7 +6,8 @@
 	"image": "mcr.microsoft.com/devcontainers/python:3-3.14-trixie",
 	"features": {
 		"ghcr.io/devcontainers/features/node:2": {},
-		"ghcr.io/devcontainers-extra/features/pnpm:2": {}
+		"ghcr.io/devcontainers-extra/features/pnpm:2": {},
+		"ghcr.io/astral-sh/uv:latest": {}
 	},
 	"customizations": {
 		"vscode": {
@@ -27,7 +28,7 @@
 	// "forwardPorts": [],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "pip3 install --user -r requirements.txt",
+	"postCreateCommand": "git config core.hooksPath .githooks && uv sync --extra dev",
 
 	// Configure tool-specific properties.
 	// "customizations": {},
