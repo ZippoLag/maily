@@ -41,11 +41,11 @@
 
 ## 6. Multi-Category Display
 
-- [ ] 6.1 Create helper function to determine primary category, verify correct selection
-- [ ] 6.2 Create helper function to format category badges, verify badges render correctly
-- [ ] 6.3 Update Tree node rendering to show primary + badges, verify display in TUI
-- [ ] 6.4 Add truncation logic for many categories, verify "+N more" indicator shows
-- [ ] 6.5 Add tooltip/hover for full category list, verify full list accessible
+- [x] 6.1 Create helper function to determine primary category, verify correct selection
+- [x] 6.2 Create helper function to format category badges, verify badges render correctly
+- [x] 6.3 Update Tree node rendering to show primary + badges, verify display in TUI
+- [x] 6.4 Add truncation logic for many categories, verify "+N more" indicator shows
+- [x] 6.5 Add tooltip/hover for full category list, verify full list accessible
 
 ## 7. Rule Learning System
 
