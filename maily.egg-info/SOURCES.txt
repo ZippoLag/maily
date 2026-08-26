@@ -28,8 +28,10 @@ tests/test_gmail.py
 tests/test_integration.py
 tests/test_learning.py
 tests/test_local_state.py
+tests/test_ollama.py
 tests/test_presentation.py
 tests/test_secrets.py
 tests/test_smoke.py
 tests/test_sync.py
 tests/test_tui.py
+tests/test_tui_app.py
