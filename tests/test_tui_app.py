@@ -5,7 +5,13 @@ from textual.widgets import ProgressBar
 
 from maily.config import load_config
 from maily.db import Database
-from maily.tui import BrowseApp, CategoryEditModal, SuggestionModal, SummaryModal
+from maily.tui import (
+    BrowseApp,
+    CategoryEditModal,
+    DigestModal,
+    SuggestionModal,
+    SummaryModal,
+)
 
 
 def _seed(config) -> None:
@@ -266,6 +272,109 @@ def test_large_result_set_rebuilds(tmp_path):
             # All 10000 emails present under the single date bucket, bodies not preloaded
             category_node = next(c for c in tree.root.children if c.children)
             assert len(category_node.children[0].children) == 10000
+
+    asyncio.run(exercise())
+
+
+def test_digest_hotkey_opens_modal_and_dismisses(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 3)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert ("d", "digest", "Digest view") in app.BINDINGS
+            app.action_digest()
+            await pilot.pause()
+            assert isinstance(app.screen, DigestModal)
+            assert "3 emails" in str(app.screen.digest_text)
+            app.screen.dismiss(None)
+            await pilot.pause()
+            assert not isinstance(app.screen, DigestModal)
+
+    asyncio.run(exercise())
+
+
+def test_digest_cached_for_same_view(tmp_path, monkeypatch):
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 3)
+    calls = []
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            def fake_generate_digest(items, infer=None, model=""):
+                calls.append(1)
+                return "digest-text", "deterministic"
+
+            monkeypatch.setattr("maily.tui.generate_digest", fake_generate_digest)
+            app.action_digest()
+            await pilot.pause()
+            app.screen.dismiss(None)
+            await pilot.pause()
+            app.action_digest()
+            await pilot.pause()
+            assert isinstance(app.screen, DigestModal)
+            # Same view: second digest served from cache, generator not re-run
+            assert len(calls) == 1
+            assert app.screen.cached is True
+
+    asyncio.run(exercise())
+
+
+def test_digest_view_change_generates_new_digest(tmp_path, monkeypatch):
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 3)
+    calls = []
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            def fake_generate_digest(items, infer=None, model=""):
+                calls.append(sorted(item["id"] for item in items))
+                return f"digest-{len(calls)}", "deterministic"
+
+            monkeypatch.setattr("maily.tui.generate_digest", fake_generate_digest)
+            app.action_digest()
+            await pilot.pause()
+            app.screen.dismiss(None)
+            await pilot.pause()
+            # A different set of visible emails means a different view.
+            app._visible_email_nodes = lambda tree: [{"id": "m0"}, {"id": "m1"}]
+            app.action_digest()
+            await pilot.pause()
+            assert len(calls) == 2
+            assert app.screen.cached is False
+
+    asyncio.run(exercise())
+
+
+def test_digest_uses_inference_when_enabled(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 2)
+    config = replace(config, inference_enabled=True)
+
+    class FakeProvider:
+        def generate(self, prompt):
+            return "AI-generated digest"
+
+    monkeypatch.setattr("maily.ollama.OllamaProvider", lambda *a, **k: FakeProvider())
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.action_digest()
+            await pilot.pause()
+            assert isinstance(app.screen, DigestModal)
+            assert "AI-generated digest" in str(app.screen.digest_text)
 
     asyncio.run(exercise())
 

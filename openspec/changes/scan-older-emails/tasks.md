@@ -56,12 +56,12 @@
 
 ## 8. Digest Current View
 
-- [ ] 8.1 Add 'd' hotkey for digest, verify hotkey works
-- [ ] 8.2 Create digest generation function with inference fallback, verify both paths work
-- [ ] 8.3 Create DigestModal widget, verify modal displays digest
-- [ ] 8.4 Add modal dismiss functionality, verify user can close digest
-- [ ] 8.5 Implement digest caching, verify same view uses cache
-- [ ] 8.6 Add digest to footer help text, verify hotkey is documented
+- [x] 8.1 Add 'd' hotkey for digest, verify hotkey works
+- [x] 8.2 Create digest generation function with inference fallback, verify both paths work
+- [x] 8.3 Create DigestModal widget, verify modal displays digest
+- [x] 8.4 Add modal dismiss functionality, verify user can close digest
+- [x] 8.5 Implement digest caching, verify same view uses cache
+- [x] 8.6 Add digest to footer help text, verify hotkey is documented
 
 ## 9. Integration and Testing
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
@@ -17,6 +19,73 @@ except ImportError as exc:
 
 from .db import Database
 from .learning import accept_suggestion, reject_suggestion
+
+THEME_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "invoice",
+        re.compile(r"\binvoice\b|\bpayment\b|\bbill\b|\breceipt\b", re.IGNORECASE),
+    ),
+    ("newsletter", re.compile(r"\bunsubscribe\b|\bnewsletter\b", re.IGNORECASE)),
+    (
+        "meeting request",
+        re.compile(r"\bmeeting\b|\binvite\b|\bcalendar\b|\bschedule\b", re.IGNORECASE),
+    ),
+    (
+        "verification code",
+        re.compile(r"\bverification\b|\bcode\b|\bOTP\b|\b2FA\b", re.IGNORECASE),
+    ),
+    (
+        "job alert",
+        re.compile(
+            r"\bjob\b|\bhiring\b|\bvacancy\b|\brecruit\b|\bcareer\b", re.IGNORECASE
+        ),
+    ),
+)
+
+
+def count_themes(items: list[dict]) -> str:
+    """Count common themes across items, rendered as '3 invoices, 2 meetings'."""
+    counts: Counter[str] = Counter()
+    for item in items:
+        text = f"{item.get('subject', '')} {item.get('body', '')}"
+        for label, pattern in THEME_PATTERNS:
+            if pattern.search(text):
+                counts[label] += 1
+    if not counts:
+        return ""
+    return ", ".join(f"{n} {label}s" for label, n in counts.most_common())
+
+
+def generate_digest(items: list[dict], infer=None, model: str = "") -> tuple[str, str]:
+    """Build a digest of the given emails.
+
+    Returns ``(digest_text, source)`` where source is ``"inference"`` when an
+    inference callable produced the digest and ``"deterministic"`` otherwise.
+    """
+    count = len(items)
+    counts: dict[str, int] = {}
+    for item in items:
+        for category in item.get("categories") or [item.get("category")]:
+            counts[category] = counts.get(category, 0) + 1
+    breakdown = ", ".join(f"{n} {cat}" for cat, n in counts.items())
+    header = f"{count} email{'s' if count != 1 else ''}: {breakdown or 'no categories'}"
+    if infer is not None:
+        try:
+            listing = "\n".join(
+                f"- [{item.get('category', '')}] {item.get('sender_email', '')}: "
+                f"{item.get('subject', '')} - {item.get('body', '')[:200]}"
+                for item in items[:50]
+            )
+            prompt = (
+                "Summarize the key themes and action items across these emails "
+                f"({count} total, showing first {min(count, 50)}):\n{listing}"
+            )
+            return infer(prompt), "inference"
+        except Exception:  # noqa: BLE001, S110 - degrade to deterministic digest
+            pass
+    themes = count_themes(items)
+    themes_line = f"Themes: {themes}" if themes else "Themes: none detected"
+    return f"{header}\n{themes_line}", "deterministic"
 
 
 def date_group_label(received_at: str, now: datetime | None = None) -> str:
@@ -107,6 +176,27 @@ class SummaryModal(ModalScreen):
             Static(self.summary_text, classes="modal-content"),
             Static("Press Escape to close", classes="modal-hint"),
         )
+
+
+class DigestModal(ModalScreen):
+    """Modal screen showing a digest of the currently visible emails."""
+
+    def __init__(self, digest_text: str, cached: bool = False):
+        super().__init__()
+        self.digest_text = digest_text
+        self.cached = cached
+
+    def compose(self) -> ComposeResult:
+        title = "View Digest" + (" (cached)" if self.cached else "")
+        yield Vertical(
+            Static(title, classes="modal-title"),
+            Static(self.digest_text, classes="modal-content"),
+            Static("Press Escape to close", classes="modal-hint"),
+        )
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
 
 
 class SuggestionModal(ModalScreen):
@@ -219,6 +309,7 @@ class BrowseApp(App):
         ("c", "edit_categories", "Edit categories"),
         ("m", "mark", "Mark/Unmark"),
         ("p", "suggestions", "Rule suggestions"),
+        ("d", "digest", "Digest view"),
         ("pageup", "page_up", "Page Up"),
         ("pagedown", "page_down", "Page Down"),
         ("home", "home", "Home"),
@@ -241,6 +332,7 @@ class BrowseApp(App):
         self.selected_email = None
         self.selected_emails: list[dict] = []
         self.email_count = 0
+        self._digest_cache: dict[tuple, str] = {}
 
     def on_mount(self) -> None:
         self.rebuild()
@@ -398,6 +490,46 @@ Summary:"""
             self.selected_email = None
             self.selected_emails = []
 
+    def _visible_email_nodes(self, tree):
+        """Return the email rows currently visible in the tree viewport."""
+        start = max(0, tree.scroll_offset.y)
+        end = start + tree.size.height
+        nodes = []
+        for line in range(start, end):
+            node = tree._get_node(line)
+            if node is not None and node.data is not None:
+                nodes.append(node.data)
+        return nodes
+
+    def action_digest(self) -> None:
+        """Generate and display a digest of the currently visible emails."""
+        tree = self.query_one(Tree)
+        nodes = self._visible_email_nodes(tree)
+        if not nodes:
+            self.status.update("No emails visible to digest")
+            return
+        view_key = (self.sort_field, tuple(sorted(node["id"] for node in nodes)))
+        cached_text = self._digest_cache.get(view_key)
+        if cached_text is not None:
+            self.push_screen(DigestModal(cached_text, cached=True))
+            return
+        infer = None
+        if self.config.inference_enabled:
+            try:
+                from .ollama import OllamaProvider
+
+                provider = OllamaProvider(
+                    self.config.ollama_url,
+                    self.config.ollama_model,
+                    self.config.ollama_timeout_seconds,
+                )
+                infer = provider.generate
+            except Exception:  # noqa: BLE001, S110 - degraded fallback when inference is unavailable
+                pass
+        text, _ = generate_digest(nodes, infer=infer, model=self.config.ollama_model)
+        self._digest_cache[view_key] = text
+        self.push_screen(DigestModal(text))
+
     def action_page_up(self) -> None:
         self.query_one(Tree).scroll_page_up(animate=False)
 
@@ -482,7 +614,9 @@ Summary:"""
         yield root
         yield self.status
         yield ProgressBar(id="load-progress", show_eta=False, show_percentage=True)
-        yield Static("Read-only browsing. Run maily scan to refresh data.")
+        yield Static(
+            "Read-only browsing. Run maily scan to refresh data. 'd' digests the visible emails."
+        )
         yield Footer()
 
 

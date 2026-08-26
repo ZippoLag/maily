@@ -109,9 +109,17 @@ def test_tui_missing_textual_raises_friendly_error(monkeypatch):
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
+    original_module = sys.modules.get("maily.tui")
     sys.modules.pop("maily.tui", None)
-    with pytest.raises(RuntimeError, match="extra to use the TUI"):
-        importlib.import_module("maily.tui")
+    try:
+        with pytest.raises(RuntimeError, match="extra to use the TUI"):
+            importlib.import_module("maily.tui")
+    finally:
+        # Restore the real module so later tests keep referencing it.
+        if original_module is not None:
+            sys.modules["maily.tui"] = original_module
+        else:
+            sys.modules.pop("maily.tui", None)
 
 
 def test_toggle_category_adds_when_absent():
@@ -229,6 +237,64 @@ def test_date_group_label_buckets():
     assert date_group_label("2026-08-20T10:00:00+00:00", now) == "Last Week"
     assert date_group_label("2026-07-15T10:00:00+00:00", now) == "July 2026"
     assert date_group_label("2025-12-01T10:00:00+00:00", now) == "December 2025"
+
+
+def test_generate_digest_deterministic_counts_and_themes():
+    from maily.tui import generate_digest
+
+    items = [
+        {
+            "subject": "Invoice attached",
+            "body": "Please pay",
+            "categories": ["Action Required"],
+        },
+        {
+            "subject": "Newsletter #5",
+            "body": "unsubscribe here",
+            "categories": ["Newsletters - other"],
+        },
+        {"subject": "Team sync meeting", "body": "join", "categories": ["Work"]},
+        {"subject": "Lunch plan", "body": "pizza", "categories": ["Personal"]},
+    ]
+    text, source = generate_digest(items)
+    assert source == "deterministic"
+    assert (
+        "4 emails: 1 Action Required, 1 Newsletters - other, 1 Work, 1 Personal" in text
+    )
+    assert "1 invoice" in text
+    assert "1 newsletter" in text
+    assert "1 meeting request" in text
+
+
+def test_generate_digest_uses_inference_when_available():
+    from maily.tui import generate_digest
+
+    items = [{"subject": "Invoice", "body": "", "categories": ["Action Required"]}]
+    text, source = generate_digest(items, infer=lambda prompt: "AI digest text")
+    assert source == "inference"
+    assert text == "AI digest text"
+
+
+def test_generate_digest_falls_back_when_inference_fails():
+    from maily.tui import generate_digest
+
+    items = [{"subject": "Invoice", "body": "", "categories": ["Action Required"]}]
+
+    def broken(prompt):
+        raise RuntimeError("ollama down")
+
+    text, source = generate_digest(items, infer=broken)
+    assert source == "deterministic"
+    assert "1 emails" not in text  # singular handled
+    assert "1 email: 1 Action Required" in text
+
+
+def test_generate_digest_empty_view():
+    from maily.tui import generate_digest
+
+    text, source = generate_digest([])
+    assert source == "deterministic"
+    assert "0 emails" in text
 
 
 def test_grouped_rows_handles_empty_body():
