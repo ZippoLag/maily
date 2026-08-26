@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 from maily.db import Database
-from maily.tui import grouped_rows, save_category_overrides, toggle_category
+from maily.tui import format_category_badges, grouped_rows, save_category_overrides, toggle_category
 from maily.config import DEFAULT_CATEGORIES
 
 
@@ -82,6 +82,22 @@ def test_save_category_overrides_persists_for_multiple_messages():
         db.close()
     finally:
         db_path.unlink()
+
+
+def test_format_category_badges_single():
+    assert format_category_badges(["Work"]) == " [Work]"
+
+
+def test_format_category_badges_multiple():
+    assert format_category_badges(["Work", "Personal"]) == " [Work, Personal]"
+
+
+def test_format_category_badges_empty():
+    assert format_category_badges([]) == ""
+
+
+def test_format_category_badges_truncates_with_more_indicator():
+    assert format_category_badges(["Work", "Personal", "Action Required"]) == " [Work, Personal +1 more]"
 
 
 def test_save_category_overrides_empty_clears_override():
