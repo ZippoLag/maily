@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .config import Rule
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,7 @@ class ClassificationResult:
     cached: bool = False
     degraded: bool = False
     error: str | None = None
+    matched_rules: tuple["Rule", ...] = ()
 
 
 @dataclass
