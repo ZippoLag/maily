@@ -44,12 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument(
         "--include-read",
         action="store_true",
-        help="Include already-read emails in the scan",
+        default=None,
+        help="Include already-read emails in the scan (defaults to the [scan] config)",
     )
     scan_parser.add_argument(
         "--chunk-size",
         choices=CHUNK_SIZES,
-        default="day",
         help="Date chunk size for progress reporting (day/week/month/year)",
     )
     scan_parser.add_argument(
@@ -99,6 +99,13 @@ def _normalize_last(value: str) -> str:
     if match:
         return f"last {match.group(1)} {match.group(2)}"
     return f"last {value.strip().lower()}"
+
+
+def _scan_window(config, start_date, end_date, last):
+    """Resolve the scan window from CLI overrides or the [scan] config."""
+    if not any((start_date, end_date, last)) and config.scan_date_range:
+        return parse_date_range(config.scan_date_range)
+    return resolve_scan_bounds(config, start_date, end_date, last)
 
 
 def resolve_scan_bounds(config, start_date, end_date, last):
@@ -156,8 +163,8 @@ def run_scan(
     start_date=None,
     end_date=None,
     last=None,
-    include_read: bool = False,
-    chunk_size: str = "day",
+    include_read: bool | None = None,
+    chunk_size: str | None = None,
 ) -> int:
     database = Database(config.database_file)
     database.seed_categories(config.categories)
@@ -173,7 +180,11 @@ def run_scan(
         provider = OllamaProvider(
             config.ollama_url, config.ollama_model, config.ollama_timeout_seconds
         )
-        start, end = resolve_scan_bounds(config, start_date, end_date, last)
+        start, end = _scan_window(config, start_date, end_date, last)
+        effective_include_read = (
+            config.scan_include_read if include_read is None else include_read
+        )
+        effective_chunk_size = chunk_size or config.scan_chunk_size
         result = scan(
             gmail_client,
             database,
@@ -185,8 +196,8 @@ def run_scan(
             ),
             start,
             end,
-            include_read=include_read,
-            chunk_size=chunk_size,
+            include_read=effective_include_read,
+            chunk_size=effective_chunk_size,
             progress_callback=reporter.update,
         )
         payload = result.as_dict()

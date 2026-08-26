@@ -273,6 +273,62 @@ def test_run_scan_passes_historical_args_through(tmp_path, capsys, monkeypatch):
     assert captured["end"].isoformat().startswith("2024-01-31")
 
 
+def test_run_scan_uses_config_scan_defaults(tmp_path, capsys, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    config_dir = tmp_path / "home"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.toml").write_text(
+        'timezone = "UTC"\n[scan]\ninclude_read = true\n'
+        'chunk_size = "week"\ndate_range = "last 7 days"\n'
+        '[gmail]\noauth_client_file = ""\n'
+    )
+    config = replace(
+        load_config(config_dir), oauth_client_file=tmp_path / "client.json"
+    )
+    monkeypatch.setattr(cli, "CredentialStore", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        cli, "authenticate", lambda *a, **k: (SimpleNamespace(), "me@example.com")
+    )
+    monkeypatch.setattr(cli, "OllamaProvider", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(cli, "Classifier", lambda *a, **k: SimpleNamespace())
+    captured = {}
+
+    def fake_scan(
+        gmail_client,
+        database,
+        classifier,
+        start,
+        end,
+        include_read=False,
+        chunk_size="day",
+        progress_callback=None,
+        batch_size=100,
+    ):
+        captured["include_read"] = include_read
+        captured["chunk_size"] = chunk_size
+        captured["start"] = start
+        return SimpleNamespace(
+            as_dict=lambda: {
+                "status": "completed",
+                "messages": [],
+                "categories": {},
+                "counts": {},
+                "historical_counts": {"deferred": False},
+                "errors": [],
+            }
+        )
+
+    monkeypatch.setattr(cli, "scan", fake_scan)
+    # No CLI overrides: the [scan] config defaults apply.
+    assert run_scan(config, as_json=True) == 0
+    capsys.readouterr()
+    assert captured["include_read"] is True
+    assert captured["chunk_size"] == "week"
+    now = datetime.now(UTC)
+    assert captured["start"].date() == (now - timedelta(days=7)).date()
+
+
 def test_scan_help_documents_historical_options(capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["scan", "--help"])

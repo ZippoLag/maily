@@ -3,10 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from .classifier import Classifier, fingerprint
+from .config import SCAN_CHUNK_SIZES as CHUNK_SIZES
 from .db import Database, iso_now
 from .models import ClassificationResult, ScanResult
-
-CHUNK_SIZES = ("day", "week", "month", "year")
 
 # v1 is single-account; sync state is tracked under this key until
 # multi-account support lands.

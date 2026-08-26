@@ -40,10 +40,10 @@
 
 ## 6. Config Updates
 
-- [ ] 6.1 Add [scan] section to config with date_range, include_read, chunk_size
-- [ ] 6.2 Add config validation for date ranges, verify invalid dates are rejected
-- [ ] 6.3 Update default config.toml with commented examples, verify examples are clear
-- [ ] 6.4 Add config migration handling for new options, verify old configs work
+- [x] 6.1 Add [scan] section to config with date_range, include_read, chunk_size
+- [x] 6.2 Add config validation for date ranges, verify invalid dates are rejected
+- [x] 6.3 Update default config.toml with commented examples, verify examples are clear
+- [x] 6.4 Add config migration handling for new options, verify old configs work
 
 ## 7. TUI Updates
 
