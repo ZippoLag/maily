@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from maily.classifier import Classifier
-from maily.config import DEFAULT_CATEGORIES, load_config
+from maily.config import DEFAULT_CATEGORIES, Rule, load_config
 from maily.db import Database
 from maily.models import EmailMessage
 from maily.sync import scan
@@ -66,6 +66,21 @@ def test_scan_persists_original_and_override_separately(tmp_path: Path):
     ]
     assert stored_categories == ["Action Required"]
     assert database.get_user_override("m1") == ["Personal"]
+    database.close()
+
+
+def test_rule_change_triggers_reclassification(tmp_path: Path):
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    message = EmailMessage("m1", "t1", "", "alerts@example.com", "example.com", "Your verification code", "", datetime.now(timezone.utc), True, False)
+    client = FakeGmail([message])
+    bounds = config.local_today_bounds()
+    scan(client, database, Classifier(tuple(DEFAULT_CATEGORIES)), *bounds)
+    changed = Classifier(tuple(DEFAULT_CATEGORIES), rules=(Rule("Action Required", ("payment due",)),))
+    second = scan(client, database, changed, *bounds)
+    assert not second.classifications["m1"].cached
+    assert second.classifications["m1"].categories == ["Other"]
     database.close()
 
 
