@@ -3,33 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
 from typing import Protocol
 
+from .config import DEFAULT_RULES, Rule
 from .models import ClassificationResult, EmailMessage
 
 
 class InferenceProvider(Protocol):
     def classify(self, message: EmailMessage, categories: tuple[str, ...]) -> list[str]: ...
-
-
-@dataclass(frozen=True)
-class Rule:
-    category: str
-    patterns: tuple[str, ...]
-    fields: tuple[str, ...] = ("subject", "body", "sender_email")
-
-    def matches(self, message: EmailMessage) -> bool:
-        values = [getattr(message, field, "") for field in self.fields]
-        haystack = "\n".join(values).lower()
-        return any(re.search(pattern, haystack, re.IGNORECASE) for pattern in self.patterns)
-
-
-DEFAULT_RULES = (
-    Rule("Action Required", (r"verify", r"verification code", r"expires?", r"due date", r"payment required")),
-    Rule("Job search", (r"job alert", r"career", r"vacancy", r"hiring", r"recruit")),
-    Rule("Newsletters - technical", (r"unsubscribe", r"developer", r"software", r"release notes")),
-)
 
 
 def fingerprint(message: EmailMessage, categories: tuple[str, ...], rules: tuple[Rule, ...]) -> str:
@@ -42,16 +23,17 @@ def fingerprint(message: EmailMessage, categories: tuple[str, ...], rules: tuple
 
 
 class Classifier:
-    def __init__(self, categories: tuple[str, ...], provider: InferenceProvider | None = None, rules: tuple[Rule, ...] = DEFAULT_RULES, inference_enabled: bool = False):
+    def __init__(self, categories: tuple[str, ...], provider: InferenceProvider | None = None, rules: tuple[Rule, ...] | None = None, inference_enabled: bool = False):
         self.categories = categories
         self.provider = provider
-        self.rules = rules
+        self.rules = rules if rules is not None else DEFAULT_RULES
         self.inference_enabled = inference_enabled
 
     def classify(self, message: EmailMessage) -> tuple[ClassificationResult, str]:
-        matched = list(dict.fromkeys(rule.category for rule in self.rules if rule.matches(message)))
+        matched_rules = tuple(rule for rule in self.rules if rule.matches(message))
+        matched = list(dict.fromkeys(rule.category for rule in matched_rules))
         if matched:
-            return ClassificationResult(matched, "deterministic"), fingerprint(message, self.categories, self.rules)
+            return ClassificationResult(matched, "deterministic", matched_rules=matched_rules), fingerprint(message, self.categories, self.rules)
         if self.provider is None or not self.inference_enabled:
             return ClassificationResult(["Other"], "fallback", degraded=True if self.provider is None else False, error="Inference provider unavailable" if self.provider is None else None), fingerprint(message, self.categories, self.rules)
         try:

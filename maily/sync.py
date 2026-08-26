@@ -21,14 +21,18 @@ def scan(gmail_client, database: Database, classifier: Classifier, start: dateti
         errors: list[str] = []
         for message in messages:
             message_fingerprint = fingerprint(message, classifier.categories, classifier.rules)
-            cached = database.cached_classification(message.id, message_fingerprint)
+            cached = database._stored_classification(message.id, message_fingerprint)
             if cached:
-                categories, source = cached
-                result = ClassificationResult(categories, source, cached=True)
+                original_categories, original_source = cached
+                result = ClassificationResult(original_categories, original_source, cached=True)
             else:
                 result, message_fingerprint = classifier.classify(message)
+                original_categories, original_source = result.categories, result.source
+            override = database.get_user_override(message.id)
+            if override is not None:
+                result = ClassificationResult(override, "override", cached=result.cached, matched_rules=result.matched_rules)
             results[message.id] = result
-            stored[message.id] = (result.categories, result.source, message_fingerprint, result.cached)
+            stored[message.id] = (original_categories, original_source, message_fingerprint, result.cached)
             if result.error:
                 errors.append(f"{message.id}: {result.error}")
         database.upsert_messages(messages, stored)

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class Database:
@@ -95,6 +95,29 @@ class Database:
                     """
                 )
                 self.connection.execute("INSERT INTO schema_version VALUES (1)")
+                current = 1
+        if current < 2:
+            with self.connection:
+                self.connection.executescript(
+                    """
+                    CREATE TABLE user_category_overrides (
+                        message_id TEXT PRIMARY KEY REFERENCES messages(id),
+                        categories TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE TABLE learned_rule_suggestions (
+                        id INTEGER PRIMARY KEY,
+                        pattern TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        source_message_id TEXT REFERENCES messages(id),
+                        confidence REAL NOT NULL,
+                        status TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
+                    """
+                )
+                self.connection.execute("UPDATE schema_version SET version = 2")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -108,6 +131,60 @@ class Database:
     def seed_categories(self, categories: tuple[str, ...]) -> None:
         with self.transaction() as connection:
             connection.executemany("INSERT OR IGNORE INTO categories(name) VALUES (?)", [(name,) for name in categories])
+
+    def get_user_override(self, message_id: str) -> list[str] | None:
+        row = self.connection.execute(
+            "SELECT categories FROM user_category_overrides WHERE message_id = ?", (message_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0])
+
+    def set_user_override(self, message_id: str, categories: list[str]) -> None:
+        now = iso_now()
+        with self.transaction() as connection:
+            connection.execute(
+                """INSERT INTO user_category_overrides(message_id, categories, created_at, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(message_id) DO UPDATE SET
+                   categories = excluded.categories, updated_at = excluded.updated_at""",
+                (message_id, json.dumps(categories), now, now),
+            )
+
+    def delete_user_override(self, message_id: str) -> None:
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM user_category_overrides WHERE message_id = ?", (message_id,))
+
+    def get_rule_suggestions(self, status: str | None = None) -> list[sqlite3.Row]:
+        if status is None:
+            return self.connection.execute(
+                "SELECT * FROM learned_rule_suggestions ORDER BY id"
+            ).fetchall()
+        return self.connection.execute(
+            "SELECT * FROM learned_rule_suggestions WHERE status = ? ORDER BY id", (status,)
+        ).fetchall()
+
+    def add_rule_suggestion(
+        self,
+        pattern: str,
+        category: str,
+        source_message_id: str | None = None,
+        confidence: float = 0.0,
+    ) -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                """INSERT INTO learned_rule_suggestions(
+                   pattern, category, source_message_id, confidence, status, created_at)
+                   VALUES (?, ?, ?, ?, 'pending', ?)""",
+                (pattern, category, source_message_id, confidence, iso_now()),
+            )
+
+    def update_rule_suggestion_status(self, suggestion_id: int, status: str) -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                "UPDATE learned_rule_suggestions SET status = ? WHERE id = ?",
+                (status, suggestion_id),
+            )
 
     def upsert_messages(self, messages, classifications: dict[str, tuple[list[str], str, str, bool]]) -> None:
         with self.transaction() as connection:
@@ -143,7 +220,8 @@ class Database:
             "SELECT * FROM sync_runs WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
-    def cached_classification(self, message_id: str, message_fingerprint: str):
+    def _stored_classification(self, message_id: str, message_fingerprint: str):
+        """Raw stored classification for a message, without applying user overrides."""
         rows = self.connection.execute(
             "SELECT category, source FROM classifications WHERE message_id = ? AND fingerprint = ?",
             (message_id, message_fingerprint),
@@ -152,14 +230,38 @@ class Database:
             return None
         return [row[0] for row in rows], rows[0][1]
 
+    def cached_classification(self, message_id: str, message_fingerprint: str):
+        """Effective cached classification, applying a user override when present."""
+        stored = self._stored_classification(message_id, message_fingerprint)
+        if stored is None:
+            return None
+        categories, source = stored
+        override = self.get_user_override(message_id)
+        if override is not None:
+            return override, "override"
+        return categories, source
+
     def categorized_messages(self):
-        return self.connection.execute(
+        rows = self.connection.execute(
                 """SELECT m.id, m.subject, m.sender_name, m.sender_email, m.sender_domain,
                     m.received_at, m.importance, t.first_received_at, t.last_received_at, c.category
                     FROM messages m JOIN threads t ON t.id = m.thread_id
                     JOIN classifications c ON c.message_id = m.id
                ORDER BY m.received_at DESC"""
         ).fetchall()
+        by_message: dict[str, list[dict]] = {}
+        for row in rows:
+            by_message.setdefault(row["id"], []).append(dict(row))
+        result: list[dict] = []
+        for message_id, message_rows in by_message.items():
+            override = self.get_user_override(message_id)
+            categories = override if override is not None else [r["category"] for r in message_rows]
+            for category in categories:
+                row = dict(message_rows[0])
+                row["category"] = category
+                row["categories"] = categories
+                result.append(row)
+        return result
 
     def get_summary(self, message_id: str, fingerprint: str) -> str | None:
         """Get cached summary for a message if it exists."""

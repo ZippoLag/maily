@@ -4,7 +4,7 @@
 
 ## Status
 
-maily is currently a v1 foundation. It supports one Gmail account, local SQLite state, deterministic classification, optional local Ollama classification, CLI JSON output, and the initial read-only TUI. Gmail mutations, historical synchronization, scheduling, and multiple accounts are not implemented yet.
+maily is currently a v1 foundation. It supports one Gmail account, local SQLite state, deterministic classification, user-configurable classification rules, optional local Ollama classification, offline rule learning from category corrections, CLI JSON output, and a TUI with email summaries and category editing. Gmail mutations, historical synchronization, scheduling, and multiple accounts are not implemented yet.
 
 ## Setup
 
@@ -66,15 +66,36 @@ To use local inference, install Ollama, pull the configured model, and leave its
 ollama pull gemma4:e2b
 ```
 
-## Read-only TUI
+## Classification Rules
+
+Static analysis rules run **before** inference and assign emails to categories deterministically based on regex patterns matched case-insensitively against the subject, body, and sender email. Default rules cover Action Required, Job search, and Newsletters - technical.
+
+Add your own rules in `~/.maily/config.toml` under `[classification]`:
+
+```toml
+[[classification.rules]]
+category = "Work"
+patterns = [
+  "meeting invitation",
+  "project update",
+  "status report",
+]
+fields = ["subject", "body"]
+```
+
+- `category` — the category to assign when a pattern matches
+- `patterns` — regex patterns matched case-insensitively; any match assigns the category
+- `fields` — optional message fields to match against (defaults to `["subject", "body", "sender_email"]`)
+
+User rules are combined with the default rules. When an email matches multiple rules, it is assigned to **all** matching categories; the first matched rule in definition order becomes the primary category. Rules are validated when the config loads, and invalid regex patterns produce a clear configuration error.
+
+## TUI
 
 After installing the `tui` extra, launch:
 
 ```sh
 maily tui
 ```
-
-The current TUI is intentionally browse-only. It does not mark messages read, delete mail, mark spam, create filters, or perform any other Gmail mutation.
 
 ### Email Expansion
 
@@ -92,6 +113,41 @@ Select an email and press **S** (Shift+s) to generate a summary. Summaries are:
 - Cached in the database for reuse
 
 Summaries are displayed in a modal window. Press **Escape** to close the modal.
+
+### Category Editing
+
+Select an email and press **c** to open the category editor:
+- The modal lists every configured category with a checkbox
+- **Space** toggles a category on or off (arrow keys to navigate)
+- **s** saves the change and persists it in the local database
+- **Escape** cancels without saving
+
+Mark multiple emails with **m** before pressing **c** to apply the same category change to all marked emails at once.
+
+Each email shows its primary category with secondary categories as badges. The full category list is always visible in the status bar for the selected email.
+
+### Rule Learning
+
+Press **p** to review rule suggestions. maily analyzes your category corrections and, when a keyword appears in at least 3 emails you assigned to the same category, suggests it as a new rule:
+- **a** accepts the suggestion and appends it to `config.toml`
+- **r** rejects it
+
+Suggestions persist across sessions until you act on them. Rule learning is fully offline and needs no inference.
+
+### Keyboard Shortcuts
+
+| Key | Action |
+| --- | --- |
+| `q` | Quit |
+| `s` | Change sort order |
+| `S` | Summarize selected email |
+| `c` | Edit categories for selected email(s) |
+| `m` | Mark/unmark selected email for batch editing |
+| `p` | Review pending rule suggestions |
+| `Enter` | Expand/collapse email |
+| `Escape` | Close modal |
+
+
 
 ## Local State and Reset
 

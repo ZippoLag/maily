@@ -1,8 +1,15 @@
 from datetime import datetime, timezone
 
 from maily.classifier import Classifier
-from maily.config import DEFAULT_CATEGORIES
-from maily.models import EmailMessage
+from maily.config import DEFAULT_CATEGORIES, Rule
+from maily.models import EmailMessage, primary_category
+
+
+def make_message(subject: str = "", body: str = "", sender_email: str = "") -> EmailMessage:
+    return EmailMessage(
+        "1", "t", "", sender_email, sender_email.split("@")[-1] if sender_email else "",
+        subject, body, datetime.now(timezone.utc), True, False,
+    )
 
 
 def test_deterministic_rule_does_not_need_provider():
@@ -51,3 +58,29 @@ def test_inference_enabled_uses_provider():
     result, _ = Classifier(tuple(DEFAULT_CATEGORIES), FakeProvider(), inference_enabled=True).classify(message)
     assert result.categories == ["Work"]
     assert result.source == "ollama"
+
+
+def test_classification_result_tracks_matched_rules():
+    rule = Rule("Action Required", ("verify",))
+    message = make_message(subject="Please verify your account")
+    result, _ = Classifier(tuple(DEFAULT_CATEGORIES), rules=(rule,)).classify(message)
+    assert result.matched_rules == (rule,)
+    assert result.categories == ["Action Required"]
+
+
+def test_classification_result_matched_rules_empty_for_fallback():
+    message = make_message(subject="Hello world")
+    result, _ = Classifier(tuple(DEFAULT_CATEGORIES)).classify(message)
+    assert result.matched_rules == ()
+
+
+def test_primary_category_first_matched_rule_wins():
+    assert primary_category(["Action Required", "Work"]) == "Action Required"
+
+
+def test_primary_category_first_user_assigned_wins():
+    assert primary_category(["Personal", "Action Required"]) == "Personal"
+
+
+def test_primary_category_empty_returns_none():
+    assert primary_category([]) is None

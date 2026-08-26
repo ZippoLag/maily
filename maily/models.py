@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .config import Rule
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,16 @@ class EmailMessage:
         return result
 
 
+def primary_category(categories: list[str] | tuple[str, ...]) -> str | None:
+    """Return the primary category for an email.
+
+    Categories must be passed in precedence order: user-assigned categories
+    first (in assignment order), then rule-matched categories (in rule
+    definition order). The first entry is the primary category.
+    """
+    return categories[0] if categories else None
+
+
 @dataclass
 class ClassificationResult:
     categories: list[str]
@@ -32,6 +45,7 @@ class ClassificationResult:
     cached: bool = False
     degraded: bool = False
     error: str | None = None
+    matched_rules: tuple["Rule", ...] = ()
 
 
 @dataclass
