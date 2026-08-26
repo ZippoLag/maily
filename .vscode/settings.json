@@ -27,7 +27,7 @@
     },
     "peacock.color": "#40b0a7",
     "workbench.experimental.modernUI": false,
-    "peacock.remoteColor": "#e87a60",
+    "peacock.remoteColor": "#40b0a7",
     "chat.tools.terminal.autoApprove": {
         "pnpm": true,
         "pnpx": true,
