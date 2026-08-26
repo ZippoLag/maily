@@ -34,10 +34,10 @@
 - [ ] 5.2 Create CategoryEditModal widget with checkbox list of all categories, verify modal displays all categories
 - [ ] 5.3 Implement toggle logic for categories in modal, verify checkboxes can be toggled
 - [ ] 5.4 Add save/cancel functionality to modal, verify changes are persisted on save and discarded on cancel
-- [ ] 5.5 Update categorized_messages() query to include user overrides, verify TUI displays user categories
-- [ ] 5.6 Update tree display to show primary category with secondary badges, verify visual distinction
-- [ ] 5.7 Add multi-select support for batch editing, verify multiple emails can be edited together
-- [ ] 5.8 Add visual feedback (notifications) for category changes, verify user sees confirmation
+- [x] 5.5 Update categorized_messages() query to include user overrides, verify TUI displays user categories
+- [x] 5.6 Update tree display to show primary category with secondary badges, verify visual distinction
+- [x] 5.7 Add multi-select support for batch editing, verify multiple emails can be edited together
+- [x] 5.8 Add visual feedback (notifications) for category changes, verify user sees confirmation
 
 ## 6. Multi-Category Display
 
