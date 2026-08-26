@@ -132,6 +132,29 @@ class Database:
         with self.transaction() as connection:
             connection.executemany("INSERT OR IGNORE INTO categories(name) VALUES (?)", [(name,) for name in categories])
 
+    def get_user_override(self, message_id: str) -> list[str] | None:
+        row = self.connection.execute(
+            "SELECT categories FROM user_category_overrides WHERE message_id = ?", (message_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0])
+
+    def set_user_override(self, message_id: str, categories: list[str]) -> None:
+        now = iso_now()
+        with self.transaction() as connection:
+            connection.execute(
+                """INSERT INTO user_category_overrides(message_id, categories, created_at, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(message_id) DO UPDATE SET
+                   categories = excluded.categories, updated_at = excluded.updated_at""",
+                (message_id, json.dumps(categories), now, now),
+            )
+
+    def delete_user_override(self, message_id: str) -> None:
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM user_category_overrides WHERE message_id = ?", (message_id,))
+
     def upsert_messages(self, messages, classifications: dict[str, tuple[list[str], str, str, bool]]) -> None:
         with self.transaction() as connection:
             for message in messages:
