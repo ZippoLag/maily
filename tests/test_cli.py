@@ -139,6 +139,65 @@ def test_build_parser_accepts_commands():
     assert parser.parse_args(["init"]).command == "init"
 
 
+def test_scan_parser_accepts_verbose_debug_flags():
+    parser = build_parser()
+    assert parser.parse_args(["scan", "--verbose"]).verbose is True
+    assert parser.parse_args(["scan", "--debug"]).debug is True
+    assert parser.parse_args(["scan"]).verbose is False
+    assert parser.parse_args(["scan"]).debug is False
+
+
+def test_run_scan_json_excludes_progress(tmp_path, capsys, monkeypatch):
+    """Progress goes to stderr so JSON output on stdout stays clean."""
+    config = replace(
+        load_config(tmp_path / "home"), oauth_client_file=tmp_path / "client.json"
+    )
+    monkeypatch.setattr(cli, "CredentialStore", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        cli, "authenticate", lambda *a, **k: (SimpleNamespace(), "me@example.com")
+    )
+    monkeypatch.setattr(cli, "OllamaProvider", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(cli, "Classifier", lambda *a, **k: SimpleNamespace())
+
+    def fake_scan(
+        gmail_client,
+        database,
+        classifier,
+        start,
+        end,
+        include_read=False,
+        chunk_size="day",
+        progress_callback=None,
+        batch_size=100,
+    ):
+        if progress_callback:
+            progress_callback(
+                0,
+                2,
+                start,
+                end,
+                {"fetched": 1, "total_fetched": 1, "cached": 0},
+            )
+        return SimpleNamespace(
+            as_dict=lambda: {
+                "status": "completed",
+                "messages": [],
+                "categories": {},
+                "counts": {},
+                "historical_counts": {"deferred": False},
+                "errors": [],
+            }
+        )
+
+    monkeypatch.setattr(cli, "scan", fake_scan)
+    assert run_scan(config, as_json=True, progress_level=2) == 0
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["status"] == "completed"
+    assert "Scanning:" not in captured.out
+    assert "Scanning:" in captured.err
+
+
 def test_version_flag_exits_zero(capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["--version"])
@@ -201,5 +260,20 @@ def test_main_tui_friendly_error(tmp_path, capsys, monkeypatch):
 
 
 def test_main_scan_delegates(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli, "run_scan", lambda config, as_json: 3)
+    monkeypatch.setattr(cli, "run_scan", lambda config, as_json, progress_level=1: 3)
     assert main(["--home", str(tmp_path / "home"), "scan"]) == 3
+
+
+def test_main_scan_debug_sets_progress_level(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        cli,
+        "run_scan",
+        lambda config, as_json, progress_level=1: calls.append(
+            (as_json, progress_level)
+        ),
+    )
+    main(["--home", str(tmp_path / "home"), "scan", "--debug"])
+    assert calls == [(False, 3)]
+    main(["--home", str(tmp_path / "home"), "scan", "--verbose"])
+    assert calls == [(False, 3), (False, 2)]

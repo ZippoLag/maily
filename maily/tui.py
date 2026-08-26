@@ -10,7 +10,7 @@ try:
     from textual.binding import Binding
     from textual.containers import Vertical
     from textual.screen import ModalScreen
-    from textual.widgets import Checkbox, Footer, Header, Static, Tree
+    from textual.widgets import Checkbox, Footer, Header, ProgressBar, Static, Tree
 except ImportError as exc:
     raise RuntimeError("Install maily with the 'tui' extra to use the TUI") from exc
 
@@ -227,11 +227,17 @@ class BrowseApp(App):
         tree.clear()
         rows = self.database.categorized_messages()
         grouped = grouped_rows(rows, self.config.categories, self.sort_field)
-        for category, items in grouped.items():
+        progress = self.query_one("#load-progress", ProgressBar)
+        progress.display = True
+        progress.total = len(grouped)
+        progress.progress = 0
+        for index, (category, items) in enumerate(grouped.items()):
             category_node = tree.root.add(f"{category} ({len(items)})")
             for item in items:
                 self._add_email_node(category_node, item)
+            progress.progress = index + 1
         tree.root.expand()
+        progress.display = False
 
     def _add_email_node(self, parent_node, item):
         """Add an email node that can be expanded to show sender and body."""
@@ -414,6 +420,7 @@ Summary:"""
         root = CategoryTree("Today's unread mail")
         yield root
         yield self.status
+        yield ProgressBar(id="load-progress", show_eta=False, show_percentage=True)
         yield Static("Read-only browsing. Run maily scan to refresh data.")
         yield Footer()
 

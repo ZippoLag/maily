@@ -1,6 +1,8 @@
 import asyncio
 from types import SimpleNamespace
 
+from textual.widgets import ProgressBar
+
 from maily.config import load_config
 from maily.db import Database
 from maily.tui import BrowseApp, CategoryEditModal, SuggestionModal, SummaryModal
@@ -87,5 +89,23 @@ def test_browse_app_interactions(tmp_path):
             # Everything survived: tree still rebuilds.
             app.action_sort()
             await pilot.pause()
+
+    asyncio.run(exercise())
+
+
+def test_tui_shows_progress_bar_during_rebuild(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            bar = app.query_one("#load-progress", ProgressBar)
+            assert bar is not None
+            # Rebuild drives the progress bar over the loaded groups.
+            app.rebuild()
+            await pilot.pause()
+            # Bar is hidden again once loading completes.
+            assert bar.display is False
 
     asyncio.run(exercise())

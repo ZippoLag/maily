@@ -12,6 +12,7 @@ from .classifier import Classifier
 from .config import load_config
 from .db import Database
 from .ollama import OllamaProvider
+from .progress import ProgressReporter
 from .secrets import CredentialStore, CredentialStoreError
 from .sync import scan
 
@@ -33,6 +34,16 @@ def build_parser() -> argparse.ArgumentParser:
         "scan", help="Scan today's unread Gmail messages"
     )
     scan_parser.add_argument("--json-format", action="store_true")
+    scan_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Show processing rate and ETA in progress output",
+    )
+    scan_parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show per-chunk debug details in progress output",
+    )
     tui = subparsers.add_parser("tui", help="Browse the latest scan read-only")
     tui.add_argument("--json-format", action="store_true")
     return parser
@@ -58,9 +69,10 @@ def render_human(result: dict) -> str:
     return "\n".join(lines)
 
 
-def run_scan(config, as_json: bool) -> int:
+def run_scan(config, as_json: bool, progress_level: int = 1) -> int:
     database = Database(config.database_file)
     database.seed_categories(config.categories)
+    reporter = ProgressReporter(level=progress_level)
     try:
         credentials = CredentialStore()
         client_file = config.oauth_client_file
@@ -72,6 +84,7 @@ def run_scan(config, as_json: bool) -> int:
         provider = OllamaProvider(
             config.ollama_url, config.ollama_model, config.ollama_timeout_seconds
         )
+        start, end = config.local_today_bounds()
         result = scan(
             gmail_client,
             database,
@@ -81,7 +94,9 @@ def run_scan(config, as_json: bool) -> int:
                 rules=config.rules,
                 inference_enabled=config.inference_enabled,
             ),
-            *config.local_today_bounds(),
+            start,
+            end,
+            progress_callback=reporter.update,
         )
         payload = result.as_dict()
         payload["account"] = account
@@ -127,7 +142,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.command == "scan":
-        return run_scan(config, args.json_format)
+        progress_level = 3 if args.debug else (2 if args.verbose else 1)
+        return run_scan(config, args.json_format, progress_level)
     if args.command == "tui":
         try:
             from .tui import run_tui

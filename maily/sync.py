@@ -68,13 +68,12 @@ def scan(
         errors: list[str] = []
         total_fetched = 0
         for chunk_index, (chunk_start, chunk_end) in enumerate(chunks):
-            if progress_callback:
-                progress_callback(chunk_index, len(chunks), chunk_start, chunk_end)
             messages = gmail_client.fetch_messages(
                 chunk_start, chunk_end, include_read=include_read
             )
             total_fetched += len(messages)
             all_messages.extend(messages)
+            chunk_cached = 0
             # Stream the chunk in batches: classify and commit each batch, then
             # drop its working set so memory stays bounded for large chunks.
             for batch_start in range(0, len(messages), batch_size):
@@ -115,8 +114,23 @@ def scan(
                     )
                     if result.error:
                         errors.append(f"{message.id}: {result.error}")
+                    if result.cached:
+                        chunk_cached += 1
                 database.upsert_messages(batch, stored)
                 del stored
+            if progress_callback:
+                progress_callback(
+                    chunk_index,
+                    len(chunks),
+                    chunk_start,
+                    chunk_end,
+                    {
+                        "fetched": len(messages),
+                        "total_fetched": total_fetched,
+                        "cached": chunk_cached,
+                        "errors": len(errors),
+                    },
+                )
         with database.transaction() as connection:
             connection.execute(
                 "UPDATE sync_runs SET completed_at=?, status='completed', error=? WHERE id=?",

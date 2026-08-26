@@ -16,11 +16,11 @@
 
 ## 3. Progress Reporting
 
-- [ ] 3.1 Add ProgressReporter class for CLI output, verify CLI shows progress
-- [ ] 3.2 Add progress bar widget for TUI, verify TUI shows progress bar
-- [ ] 3.3 Implement ETA calculation based on processing rate, verify ETA updates correctly
-- [ ] 3.4 Add verbose/debug progress modes, verify all levels work
-- [ ] 3.5 Exclude progress from JSON output, verify JSON remains clean
+- [x] 3.1 Add ProgressReporter class for CLI output, verify CLI shows progress
+- [x] 3.2 Add progress bar widget for TUI, verify TUI shows progress bar
+- [x] 3.3 Implement ETA calculation based on processing rate, verify ETA updates correctly
+- [x] 3.4 Add verbose/debug progress modes, verify all levels work
+- [x] 3.5 Exclude progress from JSON output, verify JSON remains clean
 
 ## 4. Database Updates
 
