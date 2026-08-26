@@ -47,3 +47,10 @@ tests/__pycache__/test_sync.cpython-314-pytest-9.1.1.pyc
 tests/__pycache__/test_sync.cpython-314.pyc
 
 uv.lock
+tests/__pycache__/test_cli.cpython-314-pytest-9.1.1.pyc
+tests/__pycache__/test_cli.cpython-314.pyc
+tests/__pycache__/test_config.cpython-314-pytest-9.1.1.pyc
+tests/__pycache__/test_integration.cpython-314-pytest-9.1.1.pyc
+tests/__pycache__/test_learning.cpython-314-pytest-9.1.1.pyc
+tests/__pycache__/test_tui.cpython-314-pytest-9.1.1.pyc
+maily/__pycache__/learning.cpython-314.pyc

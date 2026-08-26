@@ -13,6 +13,9 @@ class FakeGmail:
     def __init__(self, messages):
         self.messages = messages
 
+    def fetch_messages(self, start, end, include_read=False):
+        return self.messages
+
     def today_unread(self, start, end):
         return self.messages
 
