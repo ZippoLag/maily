@@ -129,9 +129,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scan":
         return run_scan(config, args.json_format)
     if args.command == "tui":
-        from .tui import run_tui
-
         try:
+            from .tui import run_tui
+
             return run_tui(config, args.json_format)
         except RuntimeError as exc:
             print(f"maily: {exc}", file=sys.stderr)
