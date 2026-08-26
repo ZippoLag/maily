@@ -21,3 +21,43 @@ def test_tui_projection_groups_and_sorts_without_mutations():
     grouped = grouped_rows(rows, ["Work", "Other"])
     assert [row["subject"] for row in grouped["Work"]] == ["Newer", "Older"]
     assert grouped["Other"] == []
+
+
+def test_human_output_shows_action_required_email_details():
+    output = render_human({
+        "status": "completed",
+        "messages": [
+            {"subject": "Important Meeting", "sender_email": "boss@example.com", "body": "Please attend", "category": "Action Required"},
+            {"subject": "Newsletter", "sender_email": "news@example.com", "body": "Daily news", "category": "Newsletters"},
+        ],
+        "counts": {"Action Required": 1, "Newsletters": 1},
+        "categories": {
+            "Action Required": [
+                {"subject": "Important Meeting", "sender_email": "boss@example.com", "body": "Please attend"}
+            ],
+            "Newsletters": [
+                {"subject": "Newsletter", "sender_email": "news@example.com", "body": "Daily news"}
+            ]
+        },
+        "historical_counts": {"deferred": False},
+        "errors": [],
+    })
+    assert "Important Meeting (boss@example.com)" in output
+
+
+def test_human_output_handles_empty_subject_in_action_required():
+    output = render_human({
+        "status": "completed",
+        "messages": [
+            {"subject": "", "sender_email": "test@example.com", "body": "Test", "category": "Action Required"},
+        ],
+        "counts": {"Action Required": 1},
+        "categories": {
+            "Action Required": [
+                {"subject": "", "sender_email": "test@example.com", "body": "Test"}
+            ]
+        },
+        "historical_counts": {"deferred": False},
+        "errors": [],
+    })
+    assert "(no subject) (test@example.com)" in output

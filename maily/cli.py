@@ -33,7 +33,13 @@ def build_parser() -> argparse.ArgumentParser:
 def render_human(result: dict) -> str:
     lines = [f"Scan: {result['status']}", f"Messages synchronized: {len(result['messages'])}"]
     for category in sorted(result["counts"]):
-        lines.append(f"{category}: {result['counts'][category]}")
+        count = result['counts'][category]
+        lines.append(f"{category}: {count}")
+        if category == "Action Required" and count > 0:
+            for message in result.get("categories", {}).get(category, []):
+                subject = message.get("subject") or "(no subject)"
+                sender_email = message.get("sender_email", "")
+                lines.append(f"  - {subject} ({sender_email})")
     if result["historical_counts"]["deferred"]:
         lines.append("Historical unread and read counts: deferred")
     for error in result["errors"]:
