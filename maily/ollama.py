@@ -36,3 +36,18 @@ class OllamaProvider:
             raise RuntimeError(f"Ollama unavailable: {exc}") from exc
         output = json.loads(payload.get("response", "{}"))
         return output.get("categories", [])
+
+    def generate(self, prompt: str) -> str:
+        """Generate a text response from a prompt."""
+        request = urllib.request.Request(
+            f"{self.url}/api/generate",
+            data=json.dumps({"model": self.model, "prompt": prompt, "stream": False}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                payload = json.loads(response.read())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Ollama unavailable: {exc}") from exc
+        return payload.get("response", "")

@@ -82,8 +82,16 @@ class Database:
                         details TEXT NOT NULL DEFAULT '{}',
                         created_at TEXT NOT NULL
                     );
+                    CREATE TABLE email_summaries (
+                        message_id TEXT PRIMARY KEY,
+                        summary TEXT NOT NULL,
+                        model TEXT NOT NULL DEFAULT '',
+                        fingerprint TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
                     CREATE INDEX messages_received_idx ON messages(received_at);
                     CREATE INDEX messages_thread_idx ON messages(thread_id);
+                    CREATE INDEX summaries_message_idx ON email_summaries(message_id);
                     """
                 )
                 self.connection.execute("INSERT INTO schema_version VALUES (1)")
@@ -152,6 +160,26 @@ class Database:
                     JOIN classifications c ON c.message_id = m.id
                ORDER BY m.received_at DESC"""
         ).fetchall()
+
+    def get_summary(self, message_id: str, fingerprint: str) -> str | None:
+        """Get cached summary for a message if it exists."""
+        row = self.connection.execute(
+            "SELECT summary FROM email_summaries WHERE message_id = ? AND fingerprint = ?",
+            (message_id, fingerprint),
+        ).fetchone()
+        return row[0] if row else None
+
+    def store_summary(self, message_id: str, summary: str, model: str = "", fingerprint: str = "") -> None:
+        """Store a summary for a message."""
+        with self.transaction() as connection:
+            connection.execute(
+                """INSERT INTO email_summaries(message_id, summary, model, fingerprint, created_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(message_id) DO UPDATE SET
+                   summary = excluded.summary, model = excluded.model,
+                   fingerprint = excluded.fingerprint, created_at = excluded.created_at""",
+                (message_id, summary, model, fingerprint, iso_now()),
+            )
 
     def close(self) -> None:
         self.connection.close()

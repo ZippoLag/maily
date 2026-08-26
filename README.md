@@ -76,6 +76,23 @@ maily tui
 
 The current TUI is intentionally browse-only. It does not mark messages read, delete mail, mark spam, create filters, or perform any other Gmail mutation.
 
+### Email Expansion
+
+Navigate to an email in the tree and press **Enter** to expand it. Expanded emails show:
+- Sender information (name and email address)
+- Email body content
+
+Use **Enter** again to collapse the email.
+
+### Email Summary
+
+Select an email and press **S** (Shift+s) to generate a summary. Summaries are:
+- Generated using local Ollama inference when enabled and available
+- Fall back to a deterministic preview (first 200 characters) when inference is unavailable
+- Cached in the database for reuse
+
+Summaries are displayed in a modal window. Press **Escape** to close the modal.
+
 ## Local State and Reset
 
 The application stores configuration, SQLite state, migrations, and logs under `~/.maily/` (or the directory supplied through `--home`). The SQLite schema is versioned and migrations run before use. To reset local state, remove that directory and delete the `maily` Gmail credential from the operating system credential manager, then run `maily init` again.
