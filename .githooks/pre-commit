@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Runs the project quality gates before every commit.
+# Wired via: git config core.hooksPath .githooks
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Prefer the project venv; fall back to any python3 that has the tools.
+PY="${ROOT}/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+    PY="$(command -v python3)"
+fi
+
+echo "[pre-commit] ruff check"
+"$PY" -m ruff check maily tests
+
+echo "[pre-commit] ruff format --check"
+"$PY" -m ruff format --check maily tests
+
+echo "[pre-commit] mypy maily"
+"$PY" -m mypy maily
+
+echo "[pre-commit] pytest --cov (fail-under 65)"
+"$PY" -m pytest --cov-fail-under=65 -q
+
+echo "[pre-commit] all gates passed"
