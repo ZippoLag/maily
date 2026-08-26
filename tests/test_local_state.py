@@ -105,6 +105,22 @@ def test_get_rule_suggestions_filters_by_status(tmp_path: Path):
     database.close()
 
 
+def test_cached_classification_applies_user_override(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    seed_message(database)
+    fingerprint = "fp1"
+    database.connection.execute(
+        "INSERT INTO classifications(message_id, category, source, fingerprint, cached) VALUES ('m1', 'Action Required', 'deterministic', ?, 0)",
+        (fingerprint,),
+    )
+    database.connection.commit()
+    assert database.cached_classification("m1", fingerprint) == (["Action Required"], "deterministic")
+    database.set_user_override("m1", ["Personal"])
+    assert database.cached_classification("m1", fingerprint) == (["Personal"], "override")
+    database.close()
+
+
 def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
     path = tmp_path / "maily.sqlite3"
     connection = sqlite3.connect(path)
