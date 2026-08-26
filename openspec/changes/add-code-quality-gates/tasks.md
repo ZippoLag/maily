@@ -19,10 +19,10 @@
 
 ## 5. Pre-commit hook
 
-- [ ] 5.1 Create `.githooks/pre-commit` (executable) running, in order: `ruff check`, `ruff format --check`, `mypy maily/`, `pytest --cov`; abort the commit on any failure
-- [ ] 5.2 Wire `git config core.hooksPath .githooks` in the devcontainer setup and README; verify a failing gate blocks a commit and a clean tree commits normally
+- [x] 5.1 Create `.githooks/pre-commit` (executable) running, in order: `ruff check`, `ruff format --check`, `mypy maily/`, `pytest --cov`; abort the commit on any failure
+- [x] 5.2 Wire `git config core.hooksPath .githooks` in the devcontainer setup and README; verify a failing gate blocks a commit and a clean tree commits normally
 
 ## 6. Documentation and verification
 
-- [ ] 6.1 Update README with the developer setup (venv creation via uv, hook install, and a description of each gate)
-- [ ] 6.2 Final verification: fresh `uv sync` install, all gates green from the venv, full test suite green, and `openspec validate --all` passes
+- [x] 6.1 Update README with the developer setup (venv creation via uv, hook install, and a description of each gate)
+- [x] 6.2 Final verification: fresh `uv sync` install, all gates green from the venv, full test suite green, and `openspec validate --all` passes
