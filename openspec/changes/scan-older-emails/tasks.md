@@ -1,10 +1,10 @@
 ## 1. Gmail Client Updates
 
-- [ ] 1.1 Add date range parsing in gmail.py for CLI args and config, verify all date formats work
-- [ ] 1.2 Add include_read parameter to today_unread() method, verify read emails are fetched when enabled
-- [ ] 1.3 Implement date-based queries for Gmail API, verify correct date filtering
-- [ ] 1.4 Add rate limit handling with exponential backoff, verify retries work on rate limit
-- [ ] 1.5 Add quota error handling, verify graceful failure on quota exceeded
+- [x] 1.1 Add date range parsing in gmail.py for CLI args and config, verify all date formats work
+- [x] 1.2 Add include_read parameter to today_unread() method, verify read emails are fetched when enabled
+- [x] 1.3 Implement date-based queries for Gmail API, verify correct date filtering
+- [x] 1.4 Add rate limit handling with exponential backoff, verify retries work on rate limit
+- [x] 1.5 Add quota error handling, verify graceful failure on quota exceeded
 
 ## 2. Sync Logic Updates
 
