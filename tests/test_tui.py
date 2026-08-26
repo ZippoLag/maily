@@ -1,7 +1,8 @@
 import tempfile
 from pathlib import Path
 from maily.db import Database
-from maily.tui import grouped_rows
+from maily.tui import grouped_rows, save_category_overrides, toggle_category
+from maily.config import DEFAULT_CATEGORIES
 
 
 def test_database_summary_cache():
@@ -51,6 +52,56 @@ def test_grouped_rows_handles_empty_categories():
     assert [row["subject"] for row in grouped["Work"]] == ["Test"]
     assert grouped["Personal"] == []
     assert grouped["Other"] == []
+
+
+def test_toggle_category_adds_when_absent():
+    assert toggle_category(["Work"], "Personal") == ["Work", "Personal"]
+
+
+def test_toggle_category_removes_when_present():
+    assert toggle_category(["Work", "Personal"], "Personal") == ["Work"]
+
+
+def test_save_category_overrides_persists_for_multiple_messages():
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = Path(f.name)
+    try:
+        db = Database(db_path)
+        db.seed_categories(tuple(DEFAULT_CATEGORIES))
+        for message_id in ("m1", "m2"):
+            db.connection.execute("INSERT INTO threads(id) VALUES (?)", (message_id,))
+            db.connection.execute(
+                "INSERT INTO messages(id, thread_id, received_at, unread, is_spam, synced_at) "
+                "VALUES (?, ?, '2026-08-26T10:00:00', 0, 0, '2026-08-26T10:00:00')",
+                (message_id, message_id),
+            )
+        db.connection.commit()
+        save_category_overrides(db, ["m1", "m2"], ["Personal", "Work"])
+        assert db.get_user_override("m1") == ["Personal", "Work"]
+        assert db.get_user_override("m2") == ["Personal", "Work"]
+        db.close()
+    finally:
+        db_path.unlink()
+
+
+def test_save_category_overrides_empty_clears_override():
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = Path(f.name)
+    try:
+        db = Database(db_path)
+        db.seed_categories(tuple(DEFAULT_CATEGORIES))
+        db.connection.execute("INSERT INTO threads(id) VALUES ('m1')")
+        db.connection.execute(
+            "INSERT INTO messages(id, thread_id, received_at, unread, is_spam, synced_at) "
+            "VALUES ('m1', 'm1', '2026-08-26T10:00:00', 0, 0, '2026-08-26T10:00:00')"
+        )
+        db.connection.commit()
+        db.set_user_override("m1", ["Personal"])
+        save_category_overrides(db, ["m1"], [])
+        assert db.get_user_override("m1") is None
+        db.close()
+    finally:
+        db_path.unlink()
 
 
 def test_grouped_rows_handles_empty_body():
