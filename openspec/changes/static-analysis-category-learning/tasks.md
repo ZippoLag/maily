@@ -49,13 +49,13 @@
 
 ## 7. Rule Learning System
 
-- [ ] 7.1 Implement stop word list (English, ~100 words), verify common words are filtered
-- [ ] 7.2 Implement pattern extraction from email content, verify words are extracted correctly
-- [ ] 7.3 Implement frequency counting per category, verify counts are accurate
-- [ ] 7.4 Implement suggestion generation with minimum threshold (default: 3), verify suggestions only appear at threshold
-- [ ] 7.5 Add suggestion presentation to TUI, verify user can see and confirm suggestions
-- [ ] 7.6 Add accepted suggestions to user config, verify new rules appear in config.toml
-- [ ] 7.7 Add suggestion status tracking (pending/accepted/rejected), verify status updates correctly
+- [x] 7.1 Implement stop word list (English, ~100 words), verify common words are filtered
+- [x] 7.2 Implement pattern extraction from email content, verify words are extracted correctly
+- [x] 7.3 Implement frequency counting per category, verify counts are accurate
+- [x] 7.4 Implement suggestion generation with minimum threshold (default: 3), verify suggestions only appear at threshold
+- [x] 7.5 Add suggestion presentation to TUI, verify user can see and confirm suggestions
+- [x] 7.6 Add accepted suggestions to user config, verify new rules appear in config.toml
+- [x] 7.7 Add suggestion status tracking (pending/accepted/rejected), verify status updates correctly
 
 ## 8. Integration and Testing
 
