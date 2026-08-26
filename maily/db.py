@@ -244,7 +244,7 @@ class Database:
     def categorized_messages(self):
         rows = self.connection.execute(
                 """SELECT m.id, m.subject, m.sender_name, m.sender_email, m.sender_domain,
-                    m.received_at, m.importance, t.first_received_at, t.last_received_at, c.category
+                    m.body, m.received_at, m.importance, t.first_received_at, t.last_received_at, c.category
                     FROM messages m JOIN threads t ON t.id = m.thread_id
                     JOIN classifications c ON c.message_id = m.id
                ORDER BY m.received_at DESC"""

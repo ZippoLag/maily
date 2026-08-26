@@ -105,6 +105,24 @@ def test_get_rule_suggestions_filters_by_status(tmp_path: Path):
     database.close()
 
 
+def test_categorized_messages_includes_body(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    database.connection.execute("INSERT INTO threads(id) VALUES ('m1')")
+    database.connection.execute(
+        "INSERT INTO messages(id, thread_id, subject, body, received_at, unread, is_spam, synced_at) "
+        "VALUES ('m1', 'm1', 'Hello', 'Real body text', '2026-08-26T10:00:00', 0, 0, '2026-08-26T10:00:00')"
+    )
+    database.connection.execute(
+        "INSERT INTO classifications(message_id, category, source, fingerprint, cached) "
+        "VALUES ('m1', 'Work', 'deterministic', 'fp', 0)"
+    )
+    database.connection.commit()
+    rows = database.categorized_messages()
+    assert rows[0]["body"] == "Real body text"
+    database.close()
+
+
 def test_categorized_messages_applies_user_overrides(tmp_path: Path):
     database = Database(tmp_path / "maily.sqlite3")
     database.seed_categories(tuple(DEFAULT_CATEGORIES))
