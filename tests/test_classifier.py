@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from maily.classifier import Classifier
 from maily.config import DEFAULT_CATEGORIES, Rule
-from maily.models import EmailMessage
+from maily.models import EmailMessage, primary_category
 
 
 def make_message(subject: str = "", body: str = "", sender_email: str = "") -> EmailMessage:
@@ -72,3 +72,15 @@ def test_classification_result_matched_rules_empty_for_fallback():
     message = make_message(subject="Hello world")
     result, _ = Classifier(tuple(DEFAULT_CATEGORIES)).classify(message)
     assert result.matched_rules == ()
+
+
+def test_primary_category_first_matched_rule_wins():
+    assert primary_category(["Action Required", "Work"]) == "Action Required"
+
+
+def test_primary_category_first_user_assigned_wins():
+    assert primary_category(["Personal", "Action Required"]) == "Personal"
+
+
+def test_primary_category_empty_returns_none():
+    assert primary_category([]) is None

@@ -28,6 +28,16 @@ class EmailMessage:
         return result
 
 
+def primary_category(categories: list[str] | tuple[str, ...]) -> str | None:
+    """Return the primary category for an email.
+
+    Categories must be passed in precedence order: user-assigned categories
+    first (in assignment order), then rule-matched categories (in rule
+    definition order). The first entry is the primary category.
+    """
+    return categories[0] if categories else None
+
+
 @dataclass
 class ClassificationResult:
     categories: list[str]
