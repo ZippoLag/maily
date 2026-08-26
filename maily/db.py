@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class Database:
@@ -95,6 +95,29 @@ class Database:
                     """
                 )
                 self.connection.execute("INSERT INTO schema_version VALUES (1)")
+                current = 1
+        if current < 2:
+            with self.connection:
+                self.connection.executescript(
+                    """
+                    CREATE TABLE user_category_overrides (
+                        message_id TEXT PRIMARY KEY REFERENCES messages(id),
+                        categories TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE TABLE learned_rule_suggestions (
+                        id INTEGER PRIMARY KEY,
+                        pattern TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        source_message_id TEXT REFERENCES messages(id),
+                        confidence REAL NOT NULL,
+                        status TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
+                    """
+                )
+                self.connection.execute("UPDATE schema_version SET version = 2")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
