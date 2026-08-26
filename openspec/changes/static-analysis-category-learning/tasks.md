@@ -59,12 +59,12 @@
 
 ## 8. Integration and Testing
 
-- [ ] 8.1 Add integration test: user adds rule to config, verifies email is classified correctly
-- [ ] 8.2 Add integration test: user overrides category in TUI, verifies change persists
-- [ ] 8.3 Add integration test: rule learning suggests pattern from corrections, verifies suggestion is accurate
-- [ ] 8.4 Add integration test: multi-category display shows primary + badges, verifies rendering
-- [ ] 8.5 Add test: system works with inference disabled, verify no errors
-- [ ] 8.6 Add test: database migration for existing users, verify no data loss
+- [x] 8.1 Add integration test: user adds rule to config, verifies email is classified correctly
+- [x] 8.2 Add integration test: user overrides category in TUI, verifies change persists
+- [x] 8.3 Add integration test: rule learning suggests pattern from corrections, verifies suggestion is accurate
+- [x] 8.4 Add integration test: multi-category display shows primary + badges, verifies rendering
+- [x] 8.5 Add test: system works with inference disabled, verify no errors
+- [x] 8.6 Add test: database migration for existing users, verify no data loss
 
 ## 9. Documentation Updates
 
