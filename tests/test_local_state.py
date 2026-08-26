@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 from maily.config import DEFAULT_CATEGORIES, load_config
@@ -101,6 +102,55 @@ def test_get_rule_suggestions_filters_by_status(tmp_path: Path):
     database.add_rule_suggestion("invoice", "Action Required", confidence=0.6)
     assert len(database.get_rule_suggestions(status="pending")) == 2
     assert database.get_rule_suggestions(status="accepted") == []
+    database.close()
+
+
+def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
+    path = tmp_path / "maily.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE schema_version (version INTEGER NOT NULL);
+        CREATE TABLE categories (name TEXT PRIMARY KEY);
+        CREATE TABLE threads (id TEXT PRIMARY KEY, first_received_at TEXT, last_received_at TEXT);
+        CREATE TABLE messages (
+            id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL REFERENCES threads(id),
+            sender_name TEXT NOT NULL DEFAULT '',
+            sender_email TEXT NOT NULL DEFAULT '',
+            sender_domain TEXT NOT NULL DEFAULT '',
+            subject TEXT NOT NULL DEFAULT '',
+            body TEXT NOT NULL DEFAULT '',
+            received_at TEXT NOT NULL,
+            unread INTEGER NOT NULL,
+            is_spam INTEGER NOT NULL,
+            importance REAL,
+            synced_at TEXT NOT NULL
+        );
+        """
+    )
+    connection.execute("INSERT INTO schema_version VALUES (1)")
+    connection.execute("INSERT INTO categories(name) VALUES ('Work')")
+    connection.execute("INSERT INTO threads(id) VALUES ('t1')")
+    connection.execute(
+        "INSERT INTO messages(id, thread_id, received_at, unread, is_spam, synced_at) "
+        "VALUES ('m1', 't1', '2026-08-26T10:00:00', 0, 0, '2026-08-26T10:00:00')"
+    )
+    connection.commit()
+    connection.close()
+
+    database = Database(path)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    # Existing data preserved
+    assert database.connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
+    assert database.connection.execute("SELECT COUNT(*) FROM categories WHERE name = 'Work'").fetchone()[0] == 1
+    # New tables created
+    for table in ("user_category_overrides", "learned_rule_suggestions"):
+        row = database.connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).fetchone()
+        assert row is not None
+    assert database.connection.execute("SELECT version FROM schema_version").fetchone()[0] == 2
     database.close()
 
 
