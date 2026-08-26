@@ -8,11 +8,11 @@
 
 ## 2. Sync Logic Updates
 
-- [ ] 2.1 Add chunked processing to scan() function, verify emails processed in date chunks
-- [ ] 2.2 Implement progress reporting callback system, verify progress updates are sent
-- [ ] 2.3 Add configurable chunk sizes (day/week/month/year), verify all chunk sizes work
-- [ ] 2.4 Add stream-based memory-efficient processing, verify memory stays bounded
-- [ ] 2.5 Update fingerprint logic for historical emails, verify caching works correctly
+- [x] 2.1 Add chunked processing to scan() function, verify emails processed in date chunks
+- [x] 2.2 Implement progress reporting callback system, verify progress updates are sent
+- [x] 2.3 Add configurable chunk sizes (day/week/month/year), verify all chunk sizes work
+- [x] 2.4 Add stream-based memory-efficient processing, verify memory stays bounded
+- [x] 2.5 Update fingerprint logic for historical emails, verify caching works correctly
 
 ## 3. Progress Reporting
 

@@ -248,6 +248,95 @@ def test_rule_change_triggers_reclassification(tmp_path: Path):
     database.close()
 
 
+def _message(message_id: str, received: datetime) -> EmailMessage:
+    return EmailMessage(
+        message_id,
+        f"t{message_id}",
+        "",
+        "person@example.com",
+        "example.com",
+        "Old email",
+        "",
+        received,
+        True,
+        False,
+    )
+
+
+def test_scan_batches_db_writes_at_batch_size(tmp_path: Path, monkeypatch):
+    """Stream-based processing: DB writes happen in batches of batch_size."""
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=UTC)
+    messages = [_message(f"m{i}", start) for i in range(250)]
+    upsert_sizes: list[int] = []
+    original_upsert = database.upsert_messages
+
+    def spy(messages, classifications):
+        upsert_sizes.append(len(messages))
+        original_upsert(messages, classifications)
+
+    monkeypatch.setattr(database, "upsert_messages", spy)
+    scan(
+        FakeGmail(messages),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+        chunk_size="day",
+        batch_size=100,
+    )
+    assert upsert_sizes == [100, 100, 50]
+    assert (
+        database.connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        == 250
+    )
+    database.close()
+
+
+def test_scan_persists_processed_chunks_when_later_chunk_fails(tmp_path: Path):
+    """Stream-based processing: already-processed chunks stay committed when a later chunk fails."""
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 3, 23, 59, 59, tzinfo=UTC)
+    chunk1 = datetime(2024, 1, 1, tzinfo=UTC)
+    chunk2 = datetime(2024, 1, 2, tzinfo=UTC)
+
+    class FlakyGmail:
+        def __init__(self):
+            self.queries = []
+            self.index = 0
+
+        def fetch_messages(self, start, end, include_read=False):
+            self.queries.append((start, end, include_read))
+            if self.index == 0:
+                self.index += 1
+                return [_message("m1", chunk1)]
+            if self.index == 1:
+                self.index += 1
+                return [_message("m2", chunk2)]
+            raise RuntimeError("api outage")
+
+    result = scan(
+        FlakyGmail(),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+        chunk_size="day",
+    )
+    assert result.status == "failed"
+    # Both processed chunks were committed before the failure
+    assert (
+        database.connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 2
+    )
+    database.close()
+
+
 def test_failed_scan_keeps_last_completed_sync(tmp_path: Path):
     config = load_config(tmp_path / ".maily")
     database = Database(config.database_file)
