@@ -6,7 +6,13 @@ import pytest
 
 import maily.tui
 from maily import cli
-from maily.cli import build_parser, main, render_human, run_scan
+from maily.cli import (
+    build_parser,
+    main,
+    render_human,
+    resolve_scan_bounds,
+    run_scan,
+)
 from maily.config import load_config
 from maily.db import Database
 
@@ -146,6 +152,142 @@ def test_scan_parser_accepts_verbose_debug_flags():
     assert parser.parse_args(["scan", "--debug"]).debug is True
     assert parser.parse_args(["scan"]).verbose is False
     assert parser.parse_args(["scan"]).debug is False
+
+
+def test_scan_parser_accepts_historical_args():
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "scan",
+            "--start-date",
+            "2024-01-01",
+            "--end-date",
+            "2024-01-31",
+            "--last",
+            "7days",
+            "--include-read",
+            "--chunk-size",
+            "week",
+        ]
+    )
+    assert args.start_date == "2024-01-01"
+    assert args.end_date == "2024-01-31"
+    assert args.last == "7days"
+    assert args.include_read is True
+    assert args.chunk_size == "week"
+
+
+def test_scan_parser_rejects_invalid_chunk_size():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["scan", "--chunk-size", "hour"])
+
+
+def test_resolve_scan_bounds_defaults_to_today(tmp_path):
+    config = load_config(tmp_path / "home")
+    start, end = resolve_scan_bounds(config, None, None, None)
+    today_start, today_end = config.local_today_bounds()
+    assert start == today_start
+    assert end == today_end
+
+
+def test_resolve_scan_bounds_start_date_only(tmp_path):
+    config = load_config(tmp_path / "home")
+    start, end = resolve_scan_bounds(config, "2024-01-01", None, None)
+    assert start.isoformat().startswith("2024-01-01")
+    today_end = config.local_today_bounds()[1]
+    assert end == today_end
+
+
+def test_resolve_scan_bounds_explicit_range(tmp_path):
+    config = load_config(tmp_path / "home")
+    start, end = resolve_scan_bounds(config, "2024-01-01", "2024-01-31", None)
+    assert start.isoformat().startswith("2024-01-01")
+    assert end.isoformat().startswith("2024-01-31")
+
+
+def test_resolve_scan_bounds_last_relative(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    config = load_config(tmp_path / "home")
+    start, end = resolve_scan_bounds(config, None, None, "7days")
+    now = datetime.now(UTC)
+    assert start.date() == (now - timedelta(days=7)).date()
+    assert end.date() == now.date()
+    assert end > start
+
+
+def test_run_scan_passes_historical_args_through(tmp_path, capsys, monkeypatch):
+    config = replace(
+        load_config(tmp_path / "home"), oauth_client_file=tmp_path / "client.json"
+    )
+    monkeypatch.setattr(cli, "CredentialStore", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        cli, "authenticate", lambda *a, **k: (SimpleNamespace(), "me@example.com")
+    )
+    monkeypatch.setattr(cli, "OllamaProvider", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(cli, "Classifier", lambda *a, **k: SimpleNamespace())
+    captured = {}
+
+    def fake_scan(
+        gmail_client,
+        database,
+        classifier,
+        start,
+        end,
+        include_read=False,
+        chunk_size="day",
+        progress_callback=None,
+        batch_size=100,
+    ):
+        captured["include_read"] = include_read
+        captured["chunk_size"] = chunk_size
+        captured["start"] = start
+        captured["end"] = end
+        return SimpleNamespace(
+            as_dict=lambda: {
+                "status": "completed",
+                "messages": [],
+                "categories": {},
+                "counts": {},
+                "historical_counts": {"deferred": False},
+                "errors": [],
+            }
+        )
+
+    monkeypatch.setattr(cli, "scan", fake_scan)
+    assert (
+        run_scan(
+            config,
+            as_json=True,
+            start_date="2024-01-01",
+            end_date="2024-01-31",
+            include_read=True,
+            chunk_size="week",
+        )
+        == 0
+    )
+    capsys.readouterr()
+    assert captured["include_read"] is True
+    assert captured["chunk_size"] == "week"
+    assert captured["start"].isoformat().startswith("2024-01-01")
+    assert captured["end"].isoformat().startswith("2024-01-31")
+
+
+def test_scan_help_documents_historical_options(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["scan", "--help"])
+    assert excinfo.value.code == 0
+    out = capsys.readouterr().out
+    for flag in (
+        "--start-date",
+        "--end-date",
+        "--last",
+        "--include-read",
+        "--chunk-size",
+        "--verbose",
+        "--debug",
+    ):
+        assert flag in out
 
 
 def test_run_scan_json_excludes_progress(tmp_path, capsys, monkeypatch):
@@ -303,7 +445,9 @@ def test_main_status_reset_requires_confirmation(tmp_path, capsys, monkeypatch):
 
 
 def test_main_scan_delegates(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli, "run_scan", lambda config, as_json, progress_level=1: 3)
+    monkeypatch.setattr(
+        cli, "run_scan", lambda config, as_json, progress_level=1, **kwargs: 3
+    )
     assert main(["--home", str(tmp_path / "home"), "scan"]) == 3
 
 
@@ -312,7 +456,7 @@ def test_main_scan_debug_sets_progress_level(tmp_path, monkeypatch):
     monkeypatch.setattr(
         cli,
         "run_scan",
-        lambda config, as_json, progress_level=1: calls.append(
+        lambda config, as_json, progress_level=1, **kwargs: calls.append(
             (as_json, progress_level)
         ),
     )

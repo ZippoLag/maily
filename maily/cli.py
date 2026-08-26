@@ -11,10 +11,11 @@ from .auth import authenticate
 from .classifier import Classifier
 from .config import load_config
 from .db import Database
+from .gmail import parse_date, parse_date_range
 from .ollama import OllamaProvider
 from .progress import ProgressReporter
 from .secrets import CredentialStore, CredentialStoreError
-from .sync import scan
+from .sync import CHUNK_SIZES, scan
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,9 +32,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init.add_argument("--oauth-client-file", type=Path)
     scan_parser = subparsers.add_parser(
-        "scan", help="Scan today's unread Gmail messages"
+        "scan", help="Scan Gmail messages, optionally over a historical date range"
     )
     scan_parser.add_argument("--json-format", action="store_true")
+    scan_parser.add_argument("--start-date", help="Scan from this date (YYYY-MM-DD)")
+    scan_parser.add_argument("--end-date", help="Scan up to this date (YYYY-MM-DD)")
+    scan_parser.add_argument(
+        "--last",
+        help="Scan the last N days/weeks/months/years (e.g. --last 7days)",
+    )
+    scan_parser.add_argument(
+        "--include-read",
+        action="store_true",
+        help="Include already-read emails in the scan",
+    )
+    scan_parser.add_argument(
+        "--chunk-size",
+        choices=CHUNK_SIZES,
+        default="day",
+        help="Date chunk size for progress reporting (day/week/month/year)",
+    )
     scan_parser.add_argument(
         "--verbose",
         action="store_true",
@@ -73,6 +91,32 @@ def render_human(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _normalize_last(value: str) -> str:
+    """Turn ``7days``/``7 days`` into the ``last N unit`` spec parse_date_range accepts."""
+    match = re.fullmatch(
+        r"(\d+)\s*(days?|weeks?|months?|years?)", value.strip().lower()
+    )
+    if match:
+        return f"last {match.group(1)} {match.group(2)}"
+    return f"last {value.strip().lower()}"
+
+
+def resolve_scan_bounds(config, start_date, end_date, last):
+    """Resolve the scan window from CLI overrides, defaulting to today.
+
+    Priority: ``--last`` relative spec, then explicit ``--start-date``/``--end-date``
+    (each defaulting to today when omitted), then the config's today-only bounds.
+    """
+    today_start, today_end = config.local_today_bounds()
+    if last:
+        return parse_date_range(_normalize_last(last))
+    if start_date or end_date:
+        start = parse_date(start_date) if start_date else today_start
+        end = parse_date(end_date) if end_date else today_end
+        return start, end
+    return today_start, today_end
+
+
 def run_status(config, reset: bool = False) -> int:
     database = Database(config.database_file)
     try:
@@ -105,7 +149,16 @@ def run_status(config, reset: bool = False) -> int:
         database.close()
 
 
-def run_scan(config, as_json: bool, progress_level: int = 1) -> int:
+def run_scan(
+    config,
+    as_json: bool,
+    progress_level: int = 1,
+    start_date=None,
+    end_date=None,
+    last=None,
+    include_read: bool = False,
+    chunk_size: str = "day",
+) -> int:
     database = Database(config.database_file)
     database.seed_categories(config.categories)
     reporter = ProgressReporter(level=progress_level)
@@ -120,7 +173,7 @@ def run_scan(config, as_json: bool, progress_level: int = 1) -> int:
         provider = OllamaProvider(
             config.ollama_url, config.ollama_model, config.ollama_timeout_seconds
         )
-        start, end = config.local_today_bounds()
+        start, end = resolve_scan_bounds(config, start_date, end_date, last)
         result = scan(
             gmail_client,
             database,
@@ -132,6 +185,8 @@ def run_scan(config, as_json: bool, progress_level: int = 1) -> int:
             ),
             start,
             end,
+            include_read=include_read,
+            chunk_size=chunk_size,
             progress_callback=reporter.update,
         )
         payload = result.as_dict()
@@ -179,7 +234,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "scan":
         progress_level = 3 if args.debug else (2 if args.verbose else 1)
-        return run_scan(config, args.json_format, progress_level)
+        return run_scan(
+            config,
+            args.json_format,
+            progress_level,
+            start_date=args.start_date,
+            end_date=args.end_date,
+            last=args.last,
+            include_read=args.include_read,
+            chunk_size=args.chunk_size,
+        )
     if args.command == "status":
         return run_status(config, args.reset)
     if args.command == "tui":

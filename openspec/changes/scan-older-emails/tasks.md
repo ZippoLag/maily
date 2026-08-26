@@ -31,12 +31,12 @@
 
 ## 5. CLI Updates
 
-- [ ] 5.1 Add --start-date and --end-date CLI arguments, verify date parsing works
-- [ ] 5.2 Add --last N(days|weeks|months) CLI argument, verify relative dates work
-- [ ] 5.3 Add --include-read CLI flag, verify read emails are included
-- [ ] 5.4 Add --chunk-size CLI argument, verify chunk size is respected
-- [ ] 5.5 Add --verbose and --debug flags for progress output, verify output levels
-- [ ] 5.6 Update scan command help text, verify all options documented
+- [x] 5.1 Add --start-date and --end-date CLI arguments, verify date parsing works
+- [x] 5.2 Add --last N(days|weeks|months) CLI argument, verify relative dates work
+- [x] 5.3 Add --include-read CLI flag, verify read emails are included
+- [x] 5.4 Add --chunk-size CLI argument, verify chunk size is respected
+- [x] 5.5 Add --verbose and --debug flags for progress output, verify output levels
+- [x] 5.6 Update scan command help text, verify all options documented
 
 ## 6. Config Updates
 
