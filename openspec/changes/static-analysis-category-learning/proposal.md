@@ -9,6 +9,7 @@ This change enables pure static-analysis categorization that improves over time 
 - **New**: User-configurable static analysis rules via config.toml with same format as default rules
 - **New**: TUI category editing - users can add/remove categories per email with a simple interface
 - **New**: Rule learning system - maily analyzes user category corrections and suggests new rules
+- **New**: Category name proposals - when user frequently assigns a new category name, suggest adding it to config
 - **New**: Multi-category display - emails show primary category with badges for additional categories
 - **Modified**: Classification to prioritize static rules and track which rules matched which emails
 - **Modified**: Database schema to store user category overrides and rule provenance
@@ -18,6 +19,7 @@ This change enables pure static-analysis categorization that improves over time 
 ### New Capabilities
 - `classification/user-rules`: User-configurable static analysis rules in config.toml format
 - `classification/rule-learning`: System that learns and suggests new rules from user category corrections
+- `classification/category-proposals`: Suggest new category names based on user-assigned free-form categories
 - `tui/category-editing`: TUI interface for viewing and editing email categories
 - `email-presentation/multi-category-display`: Display primary category with badges for secondary categories
 
