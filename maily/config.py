@@ -29,6 +29,7 @@ class MailyConfig:
     ollama_model: str
     ollama_timeout_seconds: float
     categories: tuple[str, ...]
+    inference_enabled: bool = False
 
     @property
     def database_file(self) -> Path:
@@ -57,6 +58,9 @@ ollama_model = \"gemma4:e2b\"
 ollama_timeout_seconds = 20
 categories = [
 {categories}]
+
+[classification]
+inference_enabled = false
 
 [gmail]
 oauth_client_file = \"\"
@@ -87,6 +91,8 @@ def load_config(home: Path | None = None) -> MailyConfig:
     except Exception as exc:
         raise ValueError(f"Invalid configured timezone: {timezone}") from exc
     categories = tuple(dict.fromkeys([*DEFAULT_CATEGORIES, *raw.get("categories", [])]))
+    classification = raw.get("classification", {})
+    inference_enabled = classification.get("inference_enabled", False)
     return MailyConfig(
         home=state_home,
         timezone=timezone,
@@ -95,4 +101,5 @@ def load_config(home: Path | None = None) -> MailyConfig:
         ollama_model=raw.get("ollama_model", "gemma4:e2b"),
         ollama_timeout_seconds=float(raw.get("ollama_timeout_seconds", 20)),
         categories=categories,
+        inference_enabled=inference_enabled,
     )

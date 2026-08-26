@@ -17,3 +17,22 @@ def test_database_migrates_and_seeds_categories(tmp_path: Path):
     assert database.connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 8
     assert database.connection.execute("SELECT version FROM schema_version").fetchone()[0] == 1
     database.close()
+
+
+def test_config_parses_inference_enabled_default(tmp_path: Path):
+    config = load_config(tmp_path / ".maily")
+    assert config.inference_enabled == False
+
+
+def test_config_parses_inference_enabled_true(tmp_path: Path):
+    config_dir = tmp_path / ".maily"
+    config_dir.mkdir(parents=True)
+    config_file = config_dir / "config.toml"
+    config_file.write_text("""timezone = "UTC"
+[classification]
+inference_enabled = true
+[gmail]
+oauth_client_file = ""
+""")
+    config = load_config(config_dir)
+    assert config.inference_enabled == True

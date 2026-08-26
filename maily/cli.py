@@ -6,6 +6,7 @@ import re
 import sys
 from pathlib import Path
 
+from . import __version__
 from .auth import authenticate
 from .classifier import Classifier
 from .config import load_config
@@ -17,6 +18,7 @@ from .sync import scan
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="maily", description="Local Gmail triage")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--home", type=Path, help="Override the ~/.maily state directory")
     subparsers = parser.add_subparsers(dest="command", required=True)
     init = subparsers.add_parser("init", help="Create local state and show setup instructions")
@@ -49,7 +51,7 @@ def run_scan(config, as_json: bool) -> int:
             raise ValueError("Configure gmail.oauth_client_file in ~/.maily/config.toml or run maily init --oauth-client-file PATH")
         gmail_client, account = authenticate(client_file, database, credentials)
         provider = OllamaProvider(config.ollama_url, config.ollama_model, config.ollama_timeout_seconds)
-        result = scan(gmail_client, database, Classifier(config.categories, provider), *config.local_today_bounds())
+        result = scan(gmail_client, database, Classifier(config.categories, provider, inference_enabled=config.inference_enabled), *config.local_today_bounds())
         payload = result.as_dict()
         payload["account"] = account
     except (CredentialStoreError, ValueError, RuntimeError) as exc:

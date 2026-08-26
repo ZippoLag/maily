@@ -42,17 +42,18 @@ def fingerprint(message: EmailMessage, categories: tuple[str, ...], rules: tuple
 
 
 class Classifier:
-    def __init__(self, categories: tuple[str, ...], provider: InferenceProvider | None = None, rules: tuple[Rule, ...] = DEFAULT_RULES):
+    def __init__(self, categories: tuple[str, ...], provider: InferenceProvider | None = None, rules: tuple[Rule, ...] = DEFAULT_RULES, inference_enabled: bool = False):
         self.categories = categories
         self.provider = provider
         self.rules = rules
+        self.inference_enabled = inference_enabled
 
     def classify(self, message: EmailMessage) -> tuple[ClassificationResult, str]:
         matched = list(dict.fromkeys(rule.category for rule in self.rules if rule.matches(message)))
         if matched:
             return ClassificationResult(matched, "deterministic"), fingerprint(message, self.categories, self.rules)
-        if self.provider is None:
-            return ClassificationResult(["Other"], "fallback", degraded=True, error="Inference provider unavailable"), fingerprint(message, self.categories, self.rules)
+        if self.provider is None or not self.inference_enabled:
+            return ClassificationResult(["Other"], "fallback", degraded=True if self.provider is None else False, error="Inference provider unavailable" if self.provider is None else None), fingerprint(message, self.categories, self.rules)
         try:
             inferred = [category for category in self.provider.classify(message, self.categories) if category in self.categories]
             return ClassificationResult(list(dict.fromkeys(inferred or ["Other"])), "ollama"), fingerprint(message, self.categories, self.rules)
