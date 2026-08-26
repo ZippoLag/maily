@@ -15,25 +15,25 @@
 
 ## 3. Database Schema Updates
 
-- [ ] 3.1 Add user_category_overrides table migration to db.py, verify table is created on new database
-- [ ] 3.2 Add learned_rule_suggestions table migration to db.py, verify table is created on new database
-- [ ] 3.3 Add Database methods: get_user_override(), set_user_override(), delete_user_override(), verify with tests
-- [ ] 3.4 Add Database methods: get_rule_suggestions(), add_rule_suggestion(), update_rule_suggestion_status(), verify with tests
-- [ ] 3.5 Update seed_categories to handle new tables gracefully, verify existing databases work
+- [x] 3.1 Add user_category_overrides table migration to db.py, verify table is created on new database
+- [x] 3.2 Add learned_rule_suggestions table migration to db.py, verify table is created on new database
+- [x] 3.3 Add Database methods: get_user_override(), set_user_override(), delete_user_override(), verify with tests
+- [x] 3.4 Add Database methods: get_rule_suggestions(), add_rule_suggestion(), update_rule_suggestion_status(), verify with tests
+- [x] 3.5 Update seed_categories to handle new tables gracefully, verify existing databases work
 
 ## 4. User Override Application
 
-- [ ] 4.1 Add override application logic in sync.py - apply user overrides after classification, verify overrides replace rule-based categories
-- [ ] 4.2 Update scan() to store both original and override classifications, verify both are persisted
-- [ ] 4.3 Add fingerprint tracking for overrides, verify reclassification happens when rules change
-- [ ] 4.4 Update cached_classification() to check for overrides, verify overrides are applied from cache
+- [x] 4.1 Add override application logic in sync.py - apply user overrides after classification, verify overrides replace rule-based categories
+- [x] 4.2 Update scan() to store both original and override classifications, verify both are persisted
+- [x] 4.3 Add fingerprint tracking for overrides, verify reclassification happens when rules change
+- [x] 4.4 Update cached_classification() to check for overrides, verify overrides are applied from cache
 
 ## 5. TUI Category Editing
 
-- [ ] 5.1 Add 'c' key binding to BrowseApp for category edit mode, verify key opens edit dialog
-- [ ] 5.2 Create CategoryEditModal widget with checkbox list of all categories, verify modal displays all categories
-- [ ] 5.3 Implement toggle logic for categories in modal, verify checkboxes can be toggled
-- [ ] 5.4 Add save/cancel functionality to modal, verify changes are persisted on save and discarded on cancel
+- [x] 5.1 Add 'c' key binding to BrowseApp for category edit mode, verify key opens edit dialog
+- [x] 5.2 Create CategoryEditModal widget with checkbox list of all categories, verify modal displays all categories
+- [x] 5.3 Implement toggle logic for categories in modal, verify checkboxes can be toggled
+- [x] 5.4 Add save/cancel functionality to modal, verify changes are persisted on save and discarded on cancel
 - [x] 5.5 Update categorized_messages() query to include user overrides, verify TUI displays user categories
 - [x] 5.6 Update tree display to show primary category with secondary badges, verify visual distinction
 - [x] 5.7 Add multi-select support for batch editing, verify multiple emails can be edited together
@@ -68,7 +68,7 @@
 
 ## 9. Documentation Updates
 
-- [ ] 9.1 Update README.md with user rules configuration examples, verify documentation is clear
-- [ ] 9.2 Add TUI category editing documentation to README.md, verify keyboard shortcuts documented
-- [ ] 9.3 Update default config.toml comments with rule examples, verify examples are helpful
-- [ ] 9.4 Add documentation for rule learning feature, verify user understands the flow
+- [x] 9.1 Update README.md with user rules configuration examples, verify documentation is clear
+- [x] 9.2 Add TUI category editing documentation to README.md, verify keyboard shortcuts documented
+- [x] 9.3 Update default config.toml comments with rule examples, verify examples are helpful
+- [x] 9.4 Add documentation for rule learning feature, verify user understands the flow
