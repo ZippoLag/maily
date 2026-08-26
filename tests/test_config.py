@@ -1,13 +1,23 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from maily.config import Rule
 from maily.models import EmailMessage
 
 
-def make_message(subject: str = "", body: str = "", sender_email: str = "") -> EmailMessage:
+def make_message(
+    subject: str = "", body: str = "", sender_email: str = ""
+) -> EmailMessage:
     return EmailMessage(
-        "1", "t", "", sender_email, sender_email.split("@")[-1] if sender_email else "",
-        subject, body, datetime.now(timezone.utc), True, False,
+        "1",
+        "t",
+        "",
+        sender_email,
+        sender_email.split("@")[-1] if sender_email else "",
+        subject,
+        body,
+        datetime.now(UTC),
+        True,
+        False,
     )
 
 

@@ -3,12 +3,11 @@ from __future__ import annotations
 import os
 import re
 import tomllib
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
-
 
 DEFAULT_CATEGORIES = [
     "Action Required",
@@ -25,6 +24,7 @@ DEFAULT_CATEGORIES = [
 @dataclass(frozen=True)
 class Rule:
     """A classification rule with category, patterns, and fields to match against."""
+
     category: str
     patterns: tuple[str, ...]
     fields: tuple[str, ...] = ("subject", "body", "sender_email")
@@ -33,14 +33,22 @@ class Rule:
         """Return the rule's patterns that matched the message, empty tuple if none."""
         values = [getattr(message, field, "") for field in self.fields]
         haystack = "\n".join(values).lower()
-        return tuple(pattern for pattern in self.patterns if re.search(pattern, haystack, re.IGNORECASE))
+        return tuple(
+            pattern
+            for pattern in self.patterns
+            if re.search(pattern, haystack, re.IGNORECASE)
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize rule to dictionary."""
-        return {"category": self.category, "patterns": list(self.patterns), "fields": list(self.fields)}
+        return {
+            "category": self.category,
+            "patterns": list(self.patterns),
+            "fields": list(self.fields),
+        }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Rule":
+    def from_dict(cls, data: dict[str, Any]) -> Rule:
         """Deserialize rule from dictionary."""
         return cls(
             category=data["category"],
@@ -54,19 +62,21 @@ def parse_rule(rule_dict: dict[str, Any]) -> Rule:
     category = rule_dict.get("category")
     if not category:
         raise ValueError(f"Rule missing 'category': {rule_dict}")
-    
+
     patterns = rule_dict.get("patterns", [])
     if not patterns:
         raise ValueError(f"Rule '{category}' has no patterns")
-    
+
     for pattern in patterns:
         try:
             re.compile(pattern)
         except re.error as exc:
-            raise ValueError(f"Invalid regex pattern in rule '{category}': {pattern} - {exc}") from exc
-    
+            raise ValueError(
+                f"Invalid regex pattern in rule '{category}': {pattern} - {exc}"
+            ) from exc
+
     fields = rule_dict.get("fields", ["subject", "body", "sender_email"])
-    
+
     return Rule(category=category, patterns=tuple(patterns), fields=tuple(fields))
 
 
@@ -78,9 +88,21 @@ def parse_rules(rules_config: list[dict[str, Any]] | None) -> tuple[Rule, ...]:
 
 
 DEFAULT_RULES = (
-    Rule("Action Required", (r"verify", r"verification code", r"expires?", r"due date", r"payment required")),
+    Rule(
+        "Action Required",
+        (
+            r"verify",
+            r"verification code",
+            r"expires?",
+            r"due date",
+            r"payment required",
+        ),
+    ),
     Rule("Job search", (r"job alert", r"career", r"vacancy", r"hiring", r"recruit")),
-    Rule("Newsletters - technical", (r"unsubscribe", r"developer", r"software", r"release notes")),
+    Rule(
+        "Newsletters - technical",
+        (r"unsubscribe", r"developer", r"software", r"release notes"),
+    ),
 )
 
 
@@ -104,7 +126,9 @@ class MailyConfig:
     def logs_dir(self) -> Path:
         return self.home / "logs"
 
-    def local_today_bounds(self, now: datetime | None = None) -> tuple[datetime, datetime]:
+    def local_today_bounds(
+        self, now: datetime | None = None
+    ) -> tuple[datetime, datetime]:
         current = now or datetime.now(ZoneInfo(self.timezone))
         local = current.astimezone(ZoneInfo(self.timezone))
         start = local.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -155,7 +179,6 @@ oauth_client_file = ""
     path.chmod(0o600)
 
 
-
 def load_config(home: Path | None = None) -> MailyConfig:
     state_home = (home or default_home()).expanduser()
     state_home.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -176,9 +199,9 @@ def load_config(home: Path | None = None) -> MailyConfig:
     categories = tuple(dict.fromkeys([*DEFAULT_CATEGORIES, *raw.get("categories", [])]))
     classification = raw.get("classification", {})
     inference_enabled = classification.get("inference_enabled", False)
-    
+
     user_rules = parse_rules(classification.get("rules"))
-    
+
     return MailyConfig(
         home=state_home,
         timezone=timezone,

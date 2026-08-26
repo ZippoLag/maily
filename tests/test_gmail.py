@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -26,7 +26,7 @@ def test_parse_message_extracts_sender_subject_body_and_spam_state():
     raw = {
         "id": "m1",
         "threadId": "t1",
-        "internalDate": str(int(datetime(2026, 8, 25, tzinfo=timezone.utc).timestamp() * 1000)),
+        "internalDate": str(int(datetime(2026, 8, 25, tzinfo=UTC).timestamp() * 1000)),
         "labelIds": ["UNREAD", "SPAM"],
         "payload": {
             "headers": [
@@ -46,36 +46,40 @@ def test_parse_message_extracts_sender_subject_body_and_spam_state():
 
 def test_validate_oauth_client_file_accepts_installed_client(tmp_path: Path):
     client_file = tmp_path / "client.json"
-    client_file.write_text(json.dumps({"installed": {"client_id": "id"}}), encoding="utf-8")
+    client_file.write_text(
+        json.dumps({"installed": {"client_id": "id"}}), encoding="utf-8"
+    )
     validate_oauth_client_file(client_file)
 
 
 def test_parse_date_iso_format():
-    assert parse_date("2024-01-01") == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert parse_date("2024-01-01") == datetime(2024, 1, 1, tzinfo=UTC)
 
 
 def test_parse_date_iso_datetime_format():
-    assert parse_date("2024-01-01T12:00:00") == datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assert parse_date("2024-01-01T12:00:00") == datetime(
+        2024, 1, 1, 12, 0, 0, tzinfo=UTC
+    )
 
 
 def test_parse_date_range_last_7_days():
-    now = datetime(2024, 1, 31, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 31, 12, 0, tzinfo=UTC)
     start, end = parse_date_range("last 7 days", now=now)
-    assert start == datetime(2024, 1, 24, 12, 0, tzinfo=timezone.utc)
+    assert start == datetime(2024, 1, 24, 12, 0, tzinfo=UTC)
     assert end == now
 
 
 def test_parse_date_range_this_month():
-    now = datetime(2024, 1, 31, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 31, 12, 0, tzinfo=UTC)
     start, end = parse_date_range("this month", now=now)
-    assert start == datetime(2024, 1, 1, tzinfo=timezone.utc)
+    assert start == datetime(2024, 1, 1, tzinfo=UTC)
     assert end.day == 31
 
 
 def test_parse_date_range_explicit_range():
     start, end = parse_date_range("2024-01-01:2024-01-31")
-    assert start == datetime(2024, 1, 1, tzinfo=timezone.utc)
-    assert end == datetime(2024, 1, 31, tzinfo=timezone.utc)
+    assert start == datetime(2024, 1, 1, tzinfo=UTC)
+    assert end == datetime(2024, 1, 31, tzinfo=UTC)
 
 
 def test_parse_date_range_invalid_raises():
@@ -84,8 +88,8 @@ def test_parse_date_range_invalid_raises():
 
 
 def test_build_query_unread_excludes_spam_trash():
-    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=UTC)
     query = _build_query(start, end, include_read=False, spam=False)
     assert query.startswith("is:unread ")
     assert "after:1704067200" in query
@@ -93,8 +97,8 @@ def test_build_query_unread_excludes_spam_trash():
 
 
 def test_build_query_include_read_omits_unread_filter():
-    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=UTC)
     query = _build_query(start, end, include_read=True, spam=False)
     assert not query.startswith("is:unread ")
 
@@ -135,7 +139,9 @@ def test_execute_with_retry_backs_off_on_rate_limit():
 
 
 def test_execute_with_retry_stops_after_max_retries():
-    request = FakeRequest([RateLimitError(), RateLimitError(), RateLimitError(), RateLimitError()])
+    request = FakeRequest(
+        [RateLimitError(), RateLimitError(), RateLimitError(), RateLimitError()]
+    )
     with pytest.raises(RateLimitError):
         _execute_with_retry(request, max_retries=2, base_delay=0)
 
@@ -166,8 +172,8 @@ def test_fetch_messages_passes_include_read_to_query():
 
     service = FakeService()
     client = GoogleGmailClient(service)
-    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=UTC)
     client.fetch_messages(start, end, include_read=True)
     assert not any("is:unread" in kwargs["q"] for kwargs in service.queries)
     assert len(service.queries) == 2  # non-spam + spam

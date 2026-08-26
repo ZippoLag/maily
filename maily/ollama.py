@@ -21,16 +21,25 @@ class OllamaProvider:
                 "subject": message.subject,
                 "body": message.body,
             },
-            "instruction": "Return JSON only: {\"categories\": [category names]}. Choose zero or more categories.",
+            "instruction": 'Return JSON only: {"categories": [category names]}. Choose zero or more categories.',
         }
         request = urllib.request.Request(
             f"{self.url}/api/generate",
-            data=json.dumps({"model": self.model, "prompt": json.dumps(prompt), "stream": False, "format": "json"}).encode(),
+            data=json.dumps(
+                {
+                    "model": self.model,
+                    "prompt": json.dumps(prompt),
+                    "stream": False,
+                    "format": "json",
+                }
+            ).encode(),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            with urllib.request.urlopen(
+                request, timeout=self.timeout_seconds
+            ) as response:
                 payload = json.loads(response.read())
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"Ollama unavailable: {exc}") from exc
@@ -41,12 +50,16 @@ class OllamaProvider:
         """Generate a text response from a prompt."""
         request = urllib.request.Request(
             f"{self.url}/api/generate",
-            data=json.dumps({"model": self.model, "prompt": prompt, "stream": False}).encode(),
+            data=json.dumps(
+                {"model": self.model, "prompt": prompt, "stream": False}
+            ).encode(),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            with urllib.request.urlopen(
+                request, timeout=self.timeout_seconds
+            ) as response:
                 payload = json.loads(response.read())
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"Ollama unavailable: {exc}") from exc

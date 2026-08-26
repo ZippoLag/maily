@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
 from .db import Database
 from .learning import accept_suggestion, reject_suggestion
 
@@ -9,7 +11,11 @@ def grouped_rows(rows, categories, sort_field="last_received_at"):
     for row in rows:
         grouped.setdefault(row["category"], []).append(row)
     for items in grouped.values():
-        items.sort(key=lambda row: (row[sort_field] or ""), reverse=sort_field in ("first_received_at", "last_received_at", "importance"))
+        items.sort(
+            key=lambda row: row[sort_field] or "",
+            reverse=sort_field
+            in ("first_received_at", "last_received_at", "importance"),
+        )
     return grouped
 
 
@@ -47,7 +53,9 @@ def suggestion_list_text(suggestions) -> str:
     )
 
 
-def save_category_overrides(database: Database, message_ids: list[str], categories: list[str]) -> None:
+def save_category_overrides(
+    database: Database, message_ids: list[str], categories: list[str]
+) -> None:
     """Persist category overrides for multiple messages; empty list clears the override."""
     for message_id in message_ids:
         if categories:
@@ -63,21 +71,42 @@ def _load_textual():
         from textual.containers import Vertical
         from textual.screen import ModalScreen
         from textual.widgets import Checkbox, Footer, Header, Static, Tree
-        return App, ComposeResult, Checkbox, Footer, Header, Static, Tree, Vertical, ModalScreen
+
+        return (
+            App,
+            ComposeResult,
+            Checkbox,
+            Footer,
+            Header,
+            Static,
+            Tree,
+            Vertical,
+            ModalScreen,
+        )
     except ImportError as exc:
         raise RuntimeError("Install maily with the 'tui' extra to use the TUI") from exc
 
 
 def run_tui(config, as_json: bool = False) -> int:
-    App, ComposeResult, Checkbox, Footer, Header, Static, Tree, Vertical, ModalScreen = _load_textual()
+    (
+        App,
+        ComposeResult,
+        Checkbox,
+        Footer,
+        Header,
+        Static,
+        Tree,
+        Vertical,
+        ModalScreen,
+    ) = _load_textual()
 
     class SummaryModal(ModalScreen):
         """Modal screen to display email summary."""
-        
+
         def __init__(self, summary_text: str):
             super().__init__()
             self.summary_text = summary_text
-        
+
         def compose(self) -> ComposeResult:
             yield Vertical(
                 Static("Email Summary", classes="modal-title"),
@@ -95,7 +124,9 @@ def run_tui(config, as_json: bool = False) -> int:
             self.database = database
 
         def compose(self) -> ComposeResult:
-            self.content = Static(suggestion_list_text(self.suggestions), classes="modal-content")
+            self.content = Static(
+                suggestion_list_text(self.suggestions), classes="modal-content"
+            )
             yield Vertical(
                 Static("Rule Suggestions", classes="modal-title"),
                 self.content,
@@ -112,11 +143,17 @@ def run_tui(config, as_json: bool = False) -> int:
                 suggestion = self.suggestions[0]
                 if event.key == "a":
                     accept_suggestion(self.database, self.config_file, suggestion["id"])
-                    self.app.notify(f"Accepted: {suggestion['pattern']}", title="Suggestions")
+                    self.app.notify(
+                        f"Accepted: {suggestion['pattern']}", title="Suggestions"
+                    )
                 else:
                     reject_suggestion(self.database, suggestion["id"])
-                    self.app.notify(f"Rejected: {suggestion['pattern']}", title="Suggestions")
-                self.suggestions = [s for s in self.suggestions if s["id"] != suggestion["id"]]
+                    self.app.notify(
+                        f"Rejected: {suggestion['pattern']}", title="Suggestions"
+                    )
+                self.suggestions = [
+                    s for s in self.suggestions if s["id"] != suggestion["id"]
+                ]
                 self._refresh()
 
     class CategoryTree(Tree):
@@ -135,12 +172,16 @@ def run_tui(config, as_json: bool = False) -> int:
     class CategoryEditModal(ModalScreen):
         """Modal screen to view and edit categories for selected emails."""
 
-        def __init__(self, categories: list[str], initial: list[str], message_ids: list[str]):
+        def __init__(
+            self, categories: list[str], initial: list[str], message_ids: list[str]
+        ):
             super().__init__()
             self.categories = categories
             self.initial = initial
             self.message_ids = message_ids
-            self.category_by_id = {f"cat-{i}": category for i, category in enumerate(categories)}
+            self.category_by_id = {
+                f"cat-{i}": category for i, category in enumerate(categories)
+            }
 
         def compose(self) -> ComposeResult:
             yield Vertical(
@@ -169,7 +210,7 @@ def run_tui(config, as_json: bool = False) -> int:
                 self.dismiss(None)
 
     class BrowseApp(App):
-        BINDINGS = [
+        BINDINGS: ClassVar[list[tuple[str, str, str]]] = [
             ("q", "quit", "Quit"),
             ("s", "sort", "Sort"),
             ("S", "summarize", "Summarize"),
@@ -181,7 +222,13 @@ def run_tui(config, as_json: bool = False) -> int:
         def __init__(self):
             super().__init__()
             self.sort_field = "last_received_at"
-            self.sort_fields = ["first_received_at", "last_received_at", "importance", "sender_name", "sender_domain"]
+            self.sort_fields = [
+                "first_received_at",
+                "last_received_at",
+                "importance",
+                "sender_name",
+                "sender_domain",
+            ]
             self.database = Database(config.database_file)
             self.status = Static("Read-only browsing")
             self.selected_email = None
@@ -204,32 +251,39 @@ def run_tui(config, as_json: bool = False) -> int:
         def _add_email_node(self, parent_node, item):
             """Add an email node that can be expanded to show sender and body."""
             from .models import primary_category
+
             subject = item.get("subject") or "(no subject)"
             sender_name = item.get("sender_name") or ""
             sender_email = item.get("sender_email") or ""
-            
+
             sender_label = sender_name if sender_name else sender_email
             categories = item.get("categories") or [item.get("category")]
             primary = primary_category(categories)
-            badge_suffix = format_category_badges([c for c in categories if c != primary]) if primary else ""
+            badge_suffix = (
+                format_category_badges([c for c in categories if c != primary])
+                if primary
+                else ""
+            )
             primary_prefix = f"[{primary}] " if primary else ""
             email_node = parent_node.add(
                 f"{primary_prefix}{sender_label}: {subject}{badge_suffix}",
-                data=dict(item)
+                data=dict(item),
             )
-            
+
             body = item.get("body", "") or "(no body)"
             if isinstance(body, str):
-                body = body.replace('\n', ' ')[:1000]
+                body = body.replace("\n", " ")[:1000]
             sender_display = f"From: {sender_name or '(unknown)'} <{sender_email}>"
-            
+
             email_node.add(f"[dim]{sender_display}[/dim]")
             email_node.add(f"{body}")
-            
+
             email_node.allow_expand = True
 
         def action_sort(self) -> None:
-            self.sort_field = self.sort_fields[(self.sort_fields.index(self.sort_field) + 1) % len(self.sort_fields)]
+            self.sort_field = self.sort_fields[
+                (self.sort_fields.index(self.sort_field) + 1) % len(self.sort_fields)
+            ]
             self.status.update(f"Read-only browsing | sorted by {self.sort_field}")
             self.rebuild()
 
@@ -248,16 +302,16 @@ def run_tui(config, as_json: bool = False) -> int:
             sender_name = email_data.get("sender_name", "") or ""
             sender_email = email_data.get("sender_email", "") or ""
             subject = email_data.get("subject", "") or ""
-            
+
             if not body:
                 return "(no body to summarize)"
-            
+
             fingerprint = hash(f"{message_id}:{body}")
-            
+
             cached = self.database.get_summary(message_id, str(fingerprint))
             if cached:
                 return cached
-            
+
             summary_prompt = f"""Summarize this email in 2-3 sentences. Focus on action items, key information, and sender intent.
 
 Email:
@@ -266,22 +320,29 @@ Email:
 - Body: {body[:2000]}
 
 Summary:"""
-            
+
             try:
                 from .ollama import OllamaProvider
-                provider = OllamaProvider(config.ollama_url, config.ollama_model, config.ollama_timeout_seconds)
+
+                provider = OllamaProvider(
+                    config.ollama_url,
+                    config.ollama_model,
+                    config.ollama_timeout_seconds,
+                )
                 if config.inference_enabled:
                     summary = provider.generate(summary_prompt)
-                    self.database.store_summary(message_id, summary, config.ollama_model, str(fingerprint))
+                    self.database.store_summary(
+                        message_id, summary, config.ollama_model, str(fingerprint)
+                    )
                     return summary
-            except (ImportError, Exception):
+            except Exception:  # noqa: BLE001, S110 - degraded fallback when inference is unavailable
                 pass
-            
+
             if len(body) <= 200:
                 summary = f"Preview: {body[:200]}"
             else:
                 summary = f"Preview: {body[:200]}... (truncated)"
-            
+
             self.database.store_summary(message_id, summary, "", str(fingerprint))
             return summary
 
@@ -300,7 +361,9 @@ Summary:"""
         def action_suggestions(self) -> None:
             """Open the rule suggestion review modal."""
             suggestions = self.database.get_rule_suggestions(status="pending")
-            self.push_screen(SuggestionModal(suggestions, config.home / "config.toml", self.database))
+            self.push_screen(
+                SuggestionModal(suggestions, config.home / "config.toml", self.database)
+            )
 
         def action_mark(self) -> None:
             """Mark or unmark the selected email for batch category editing."""
@@ -310,15 +373,21 @@ Summary:"""
             item = self.selected_email
             if item in self.selected_emails:
                 self.selected_emails.remove(item)
-                self.status.update(f"Unmarked {item.get('subject')} ({len(self.selected_emails)} selected)")
+                self.status.update(
+                    f"Unmarked {item.get('subject')} ({len(self.selected_emails)} selected)"
+                )
             else:
                 self.selected_emails.append(item)
-                self.status.update(f"Marked {item.get('subject')} ({len(self.selected_emails)} selected)")
+                self.status.update(
+                    f"Marked {item.get('subject')} ({len(self.selected_emails)} selected)"
+                )
 
         def action_edit_categories(self) -> None:
             """Open the category edit modal for the selected email(s)."""
             if not self.selected_emails:
-                self.status.update("Select an email first (press 'c' on it, 'm' to mark more)")
+                self.status.update(
+                    "Select an email first (press 'c' on it, 'm' to mark more)"
+                )
                 return
             first = self.selected_emails[0]
             override = self.database.get_user_override(first["id"])
@@ -328,7 +397,10 @@ Summary:"""
                 initial = list(first.get("categories") or [first.get("category")])
             self._edit_initial = initial
             message_ids = [item["id"] for item in self.selected_emails]
-            self.push_screen(CategoryEditModal(list(config.categories), initial, message_ids), self._on_categories_saved)
+            self.push_screen(
+                CategoryEditModal(list(config.categories), initial, message_ids),
+                self._on_categories_saved,
+            )
 
         def _on_categories_saved(self, result) -> None:
             """Persist modal results, refresh the tree, and notify the user."""

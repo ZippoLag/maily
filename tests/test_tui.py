@@ -21,21 +21,23 @@ def test_database_summary_cache():
     """Test that email summaries can be cached and retrieved from the database."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
-    
+
     try:
         db = Database(db_path)
-        
+
         db.store_summary("test-msg-1", "Test summary", "test-model", "test-fingerprint")
         cached = db.get_summary("test-msg-1", "test-fingerprint")
         assert cached == "Test summary"
-        
-        db.store_summary("test-msg-1", "Updated summary", "test-model-2", "different-fingerprint")
+
+        db.store_summary(
+            "test-msg-1", "Updated summary", "test-model-2", "different-fingerprint"
+        )
         cached = db.get_summary("test-msg-1", "different-fingerprint")
         assert cached == "Updated summary"
-        
+
         cached = db.get_summary("nonexistent", "fingerprint")
         assert cached is None
-        
+
         db.close()
     finally:
         db_path.unlink()
@@ -44,12 +46,27 @@ def test_database_summary_cache():
 def test_grouped_rows_preserves_order():
     """Test that grouped_rows preserves the original order for each category."""
     rows = [
-        {"category": "Work", "subject": "Older", "last_received_at": "2026-08-25T08:00:00", "importance": 1},
-        {"category": "Work", "subject": "Newer", "last_received_at": "2026-08-25T09:00:00", "importance": 2},
-        {"category": "Personal", "subject": "Test", "last_received_at": "2026-08-25T10:00:00", "importance": 3},
+        {
+            "category": "Work",
+            "subject": "Older",
+            "last_received_at": "2026-08-25T08:00:00",
+            "importance": 1,
+        },
+        {
+            "category": "Work",
+            "subject": "Newer",
+            "last_received_at": "2026-08-25T09:00:00",
+            "importance": 2,
+        },
+        {
+            "category": "Personal",
+            "subject": "Test",
+            "last_received_at": "2026-08-25T10:00:00",
+            "importance": 3,
+        },
     ]
     grouped = grouped_rows(rows, ["Work", "Personal"])
-    
+
     assert [row["subject"] for row in grouped["Work"]] == ["Newer", "Older"]
     assert [row["subject"] for row in grouped["Personal"]] == ["Test"]
 
@@ -57,10 +74,15 @@ def test_grouped_rows_preserves_order():
 def test_grouped_rows_handles_empty_categories():
     """Test that grouped_rows handles empty categories correctly."""
     rows = [
-        {"category": "Work", "subject": "Test", "last_received_at": "2026-08-25T08:00:00", "importance": 1},
+        {
+            "category": "Work",
+            "subject": "Test",
+            "last_received_at": "2026-08-25T08:00:00",
+            "importance": 1,
+        },
     ]
     grouped = grouped_rows(rows, ["Work", "Personal", "Other"])
-    
+
     assert [row["subject"] for row in grouped["Work"]] == ["Test"]
     assert grouped["Personal"] == []
     assert grouped["Other"] == []
@@ -69,7 +91,18 @@ def test_grouped_rows_handles_empty_categories():
 def test_tui_textual_imports_resolve():
     """The lazy Textual imports used by the TUI must resolve (regression: ModalScreen lives in textual.screen)."""
     from textual.screen import ModalScreen as ScreenModal
-    App, ComposeResult, Checkbox, Footer, Header, Static, Tree, Vertical, ModalScreen = _load_textual()
+
+    (
+        App,
+        _ComposeResult,
+        _Checkbox,
+        _Footer,
+        _Header,
+        _Static,
+        Tree,
+        Vertical,
+        ModalScreen,
+    ) = _load_textual()
     assert ModalScreen is ScreenModal
     assert App is not None and Tree is not None and Vertical is not None
 
@@ -130,9 +163,20 @@ def test_format_category_badges_empty():
 
 
 def test_format_full_category_list_never_truncates():
-    item = {"category": "Work", "categories": ["Work", "Personal", "Action Required", "Newsletters - technical", "Job search"]}
+    item = {
+        "category": "Work",
+        "categories": [
+            "Work",
+            "Personal",
+            "Action Required",
+            "Newsletters - technical",
+            "Job search",
+        ],
+    }
     full = format_full_category_list(item)
-    assert full == "Work, Personal, Action Required, Newsletters - technical, Job search"
+    assert (
+        full == "Work, Personal, Action Required, Newsletters - technical, Job search"
+    )
 
 
 def test_suggestion_list_text_shows_all_pending_suggestions():
@@ -154,7 +198,10 @@ def test_format_full_category_list_falls_back_to_single_category():
 
 
 def test_format_category_badges_truncates_with_more_indicator():
-    assert format_category_badges(["Work", "Personal", "Action Required"]) == " [Work, Personal +1 more]"
+    assert (
+        format_category_badges(["Work", "Personal", "Action Required"])
+        == " [Work, Personal +1 more]"
+    )
 
 
 def test_save_category_overrides_empty_clears_override():
@@ -180,9 +227,15 @@ def test_save_category_overrides_empty_clears_override():
 def test_grouped_rows_handles_empty_body():
     """Test that grouped_rows handles rows with empty body."""
     rows = [
-        {"category": "Work", "subject": "Test", "body": "", "last_received_at": "2026-08-25T08:00:00", "importance": 1},
+        {
+            "category": "Work",
+            "subject": "Test",
+            "body": "",
+            "last_received_at": "2026-08-25T08:00:00",
+            "importance": 1,
+        },
     ]
     grouped = grouped_rows(rows, ["Work", "Personal"])
-    
+
     assert [row["subject"] for row in grouped["Work"]] == ["Test"]
     assert grouped["Personal"] == []

@@ -15,8 +15,14 @@ def test_first_launch_creates_restricted_state(tmp_path: Path):
 def test_database_migrates_and_seeds_categories(tmp_path: Path):
     database = Database(tmp_path / "maily.sqlite3")
     database.seed_categories(tuple(DEFAULT_CATEGORIES))
-    assert database.connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0] == 8
-    assert database.connection.execute("SELECT version FROM schema_version").fetchone()[0] == 2
+    assert (
+        database.connection.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
+        == 8
+    )
+    assert (
+        database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
+        == 2
+    )
     database.close()
 
 
@@ -36,9 +42,18 @@ def test_database_creates_learned_rule_suggestions_table(tmp_path: Path):
     ).fetchone()
     assert table is not None
     columns = {
-        row[1] for row in database.connection.execute("PRAGMA table_info(learned_rule_suggestions)")
+        row[1]
+        for row in database.connection.execute(
+            "PRAGMA table_info(learned_rule_suggestions)"
+        )
     }
-    assert {"pattern", "category", "source_message_id", "confidence", "status"}.issubset(columns)
+    assert {
+        "pattern",
+        "category",
+        "source_message_id",
+        "confidence",
+        "status",
+    }.issubset(columns)
     database.close()
 
 
@@ -83,7 +98,9 @@ def test_user_override_delete(tmp_path: Path):
 def test_rule_suggestion_lifecycle(tmp_path: Path):
     database = Database(tmp_path / "maily.sqlite3")
     assert database.get_rule_suggestions() == []
-    database.add_rule_suggestion("newsletter", "Newsletters - technical", confidence=0.8)
+    database.add_rule_suggestion(
+        "newsletter", "Newsletters - technical", confidence=0.8
+    )
     suggestions = database.get_rule_suggestions()
     assert len(suggestions) == 1
     assert suggestions[0]["pattern"] == "newsletter"
@@ -98,7 +115,9 @@ def test_rule_suggestion_lifecycle(tmp_path: Path):
 
 def test_get_rule_suggestions_filters_by_status(tmp_path: Path):
     database = Database(tmp_path / "maily.sqlite3")
-    database.add_rule_suggestion("newsletter", "Newsletters - technical", confidence=0.8)
+    database.add_rule_suggestion(
+        "newsletter", "Newsletters - technical", confidence=0.8
+    )
     database.add_rule_suggestion("invoice", "Action Required", confidence=0.6)
     assert len(database.get_rule_suggestions(status="pending")) == 2
     assert database.get_rule_suggestions(status="accepted") == []
@@ -157,9 +176,15 @@ def test_cached_classification_applies_user_override(tmp_path: Path):
         (fingerprint,),
     )
     database.connection.commit()
-    assert database.cached_classification("m1", fingerprint) == (["Action Required"], "deterministic")
+    assert database.cached_classification("m1", fingerprint) == (
+        ["Action Required"],
+        "deterministic",
+    )
     database.set_user_override("m1", ["Personal"])
-    assert database.cached_classification("m1", fingerprint) == (["Personal"], "override")
+    assert database.cached_classification("m1", fingerprint) == (
+        ["Personal"],
+        "override",
+    )
     database.close()
 
 
@@ -200,15 +225,25 @@ def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
     database = Database(path)
     database.seed_categories(tuple(DEFAULT_CATEGORIES))
     # Existing data preserved
-    assert database.connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
-    assert database.connection.execute("SELECT COUNT(*) FROM categories WHERE name = 'Work'").fetchone()[0] == 1
+    assert (
+        database.connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
+    )
+    assert (
+        database.connection.execute(
+            "SELECT COUNT(*) FROM categories WHERE name = 'Work'"
+        ).fetchone()[0]
+        == 1
+    )
     # New tables created
     for table in ("user_category_overrides", "learned_rule_suggestions"):
         row = database.connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
         ).fetchone()
         assert row is not None
-    assert database.connection.execute("SELECT version FROM schema_version").fetchone()[0] == 2
+    assert (
+        database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
+        == 2
+    )
     database.close()
 
 
