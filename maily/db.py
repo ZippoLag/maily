@@ -220,7 +220,8 @@ class Database:
             "SELECT * FROM sync_runs WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
         ).fetchone()
 
-    def cached_classification(self, message_id: str, message_fingerprint: str):
+    def _stored_classification(self, message_id: str, message_fingerprint: str):
+        """Raw stored classification for a message, without applying user overrides."""
         rows = self.connection.execute(
             "SELECT category, source FROM classifications WHERE message_id = ? AND fingerprint = ?",
             (message_id, message_fingerprint),
@@ -228,6 +229,17 @@ class Database:
         if not rows:
             return None
         return [row[0] for row in rows], rows[0][1]
+
+    def cached_classification(self, message_id: str, message_fingerprint: str):
+        """Effective cached classification, applying a user override when present."""
+        stored = self._stored_classification(message_id, message_fingerprint)
+        if stored is None:
+            return None
+        categories, source = stored
+        override = self.get_user_override(message_id)
+        if override is not None:
+            return override, "override"
+        return categories, source
 
     def categorized_messages(self):
         return self.connection.execute(
