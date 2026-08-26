@@ -1,6 +1,13 @@
 from maily.config import DEFAULT_CATEGORIES, load_config
 from maily.db import Database
-from maily.learning import STOP_WORDS, extract_words, generate_suggestions, word_frequencies
+from maily.learning import (
+    STOP_WORDS,
+    accept_suggestion,
+    extract_words,
+    generate_suggestions,
+    reject_suggestion,
+    word_frequencies,
+)
 
 
 def test_stop_words_include_common_english_words():
@@ -50,6 +57,31 @@ def test_generate_suggestions_only_at_threshold(tmp_path):
     assert by_category["Work"]["count"] == 3
     # a word appearing in fewer than threshold emails is not suggested
     assert all(suggestion["count"] >= 3 for suggestion in suggestions)
+    database.close()
+
+
+def test_accept_suggestion_writes_rule_to_config(tmp_path):
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.add_rule_suggestion("team", "Work", confidence=1.0)
+    suggestion_id = database.get_rule_suggestions()[0]["id"]
+    accept_suggestion(database, config.home / "config.toml", suggestion_id)
+    reloaded = load_config(config.home)
+    assert any(rule.category == "Work" and "team" in rule.patterns for rule in reloaded.rules)
+    database.close()
+
+
+def test_suggestion_status_tracking(tmp_path):
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.add_rule_suggestion("team", "Work", confidence=1.0)
+    database.add_rule_suggestion("invoice", "Action Required", confidence=0.8)
+    suggestions = database.get_rule_suggestions()
+    accept_suggestion(database, config.home / "config.toml", suggestions[0]["id"])
+    reject_suggestion(database, suggestions[1]["id"])
+    assert [row["pattern"] for row in database.get_rule_suggestions(status="accepted")] == ["team"]
+    assert [row["pattern"] for row in database.get_rule_suggestions(status="rejected")] == ["invoice"]
+    assert database.get_rule_suggestions(status="pending") == []
     database.close()
 
 
