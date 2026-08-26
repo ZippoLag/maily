@@ -46,6 +46,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tui = subparsers.add_parser("tui", help="Browse the latest scan read-only")
     tui.add_argument("--json-format", action="store_true")
+    status = subparsers.add_parser("status", help="Show scan progress and sync state")
+    status.add_argument(
+        "--reset", action="store_true", help="Reset sync state (asks for confirmation)"
+    )
     return parser
 
 
@@ -67,6 +71,38 @@ def render_human(result: dict) -> str:
     for error in result["errors"]:
         lines.append(f"Error: {error}")
     return "\n".join(lines)
+
+
+def run_status(config, reset: bool = False) -> int:
+    database = Database(config.database_file)
+    try:
+        state = database.get_sync_state()
+        if reset:
+            if state is None:
+                print("No sync state to reset.")
+                return 0
+            answer = input("Reset sync state? This clears scan progress. [y/N] ")
+            if answer.strip().lower() != "y":
+                print("Reset cancelled.")
+                return 0
+            database.reset_sync_state()
+            print("Sync state reset.")
+            return 0
+        if state is None:
+            print("No scan has run yet.")
+            return 0
+        print(f"Sync status: {state['status']}")
+        if state["last_sync_date"]:
+            print(f"Last sync date: {state['last_sync_date']}")
+        print(f"Messages processed: {state['total_processed']}")
+        if state["started_at"]:
+            print(f"Started: {state['started_at']}")
+        if state["completed_at"]:
+            print(f"Completed: {state['completed_at']}")
+        print(f"Chunk size: {state['chunk_size']}")
+        return 0
+    finally:
+        database.close()
 
 
 def run_scan(config, as_json: bool, progress_level: int = 1) -> int:
@@ -144,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "scan":
         progress_level = 3 if args.debug else (2 if args.verbose else 1)
         return run_scan(config, args.json_format, progress_level)
+    if args.command == "status":
+        return run_status(config, args.reset)
     if args.command == "tui":
         try:
             from .tui import run_tui

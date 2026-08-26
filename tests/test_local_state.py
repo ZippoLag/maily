@@ -21,7 +21,7 @@ def test_database_migrates_and_seeds_categories(tmp_path: Path):
     )
     assert (
         database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
-        == 2
+        == 3
     )
     database.close()
 
@@ -32,6 +32,68 @@ def test_database_creates_user_category_overrides_table(tmp_path: Path):
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'user_category_overrides'"
     ).fetchone()
     assert table is not None
+    database.close()
+
+
+def test_database_creates_sync_state_table(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    table = database.connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sync_state'"
+    ).fetchone()
+    assert table is not None
+    columns = {
+        row[1] for row in database.connection.execute("PRAGMA table_info(sync_state)")
+    }
+    assert {
+        "account",
+        "last_sync_date",
+        "last_sync_email_id",
+        "total_processed",
+        "status",
+        "started_at",
+        "completed_at",
+        "chunk_size",
+    }.issubset(columns)
+    database.close()
+
+
+def test_sync_state_round_trip(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    assert database.get_sync_state() is None
+    database.save_sync_state(
+        status="running", started_at="2024-01-01T00:00:00", chunk_size="day"
+    )
+    state = database.get_sync_state()
+    assert state["status"] == "running"
+    assert state["chunk_size"] == "day"
+    assert state["total_processed"] == 0
+    # Partial update preserves the other fields.
+    database.save_sync_state(
+        total_processed=42, last_sync_date="2024-01-02T00:00:00+00:00"
+    )
+    state = database.get_sync_state()
+    assert state["total_processed"] == 42
+    assert state["last_sync_date"] == "2024-01-02T00:00:00+00:00"
+    assert state["status"] == "running"
+    database.save_sync_state(status="completed", completed_at="2024-01-02T00:01:00")
+    state = database.get_sync_state()
+    assert state["status"] == "completed"
+    assert state["total_processed"] == 42
+    database.reset_sync_state()
+    assert database.get_sync_state() is None
+    database.close()
+
+
+def test_sync_state_is_per_account(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    database.save_sync_state(account="a@example.com", status="running")
+    database.save_sync_state(account="b@example.com", status="completed")
+    assert database.get_sync_state("a@example.com")["status"] == "running"
+    assert database.get_sync_state("b@example.com")["status"] == "completed"
+    assert database.get_sync_state() is None  # default account untouched
+    database.reset_sync_state("a@example.com")
+    assert database.get_sync_state("a@example.com") is None
+    assert database.get_sync_state("b@example.com") is not None
     database.close()
 
 
@@ -235,14 +297,14 @@ def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
         == 1
     )
     # New tables created
-    for table in ("user_category_overrides", "learned_rule_suggestions"):
+    for table in ("user_category_overrides", "learned_rule_suggestions", "sync_state"):
         row = database.connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
         ).fetchone()
         assert row is not None
     assert (
         database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
-        == 2
+        == 3
     )
     database.close()
 

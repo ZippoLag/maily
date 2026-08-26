@@ -24,10 +24,10 @@
 
 ## 4. Database Updates
 
-- [ ] 4.1 Add sync_state table to db.py, verify table is created
-- [ ] 4.2 Add Database methods: get_sync_state(), save_sync_state(), reset_sync_state()
-- [ ] 4.3 Add sync state tracking to scan() function, verify state is saved periodically
-- [ ] 4.4 Update messages table to handle historical emails, verify no duplicates
+- [x] 4.1 Add sync_state table to db.py, verify table is created
+- [x] 4.2 Add Database methods: get_sync_state(), save_sync_state(), reset_sync_state()
+- [x] 4.3 Add sync state tracking to scan() function, verify state is saved periodically
+- [x] 4.4 Update messages table to handle historical emails, verify no duplicates
 
 ## 5. CLI Updates
 

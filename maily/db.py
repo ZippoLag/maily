@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class Database:
@@ -121,6 +121,23 @@ class Database:
                     """
                 )
                 self.connection.execute("UPDATE schema_version SET version = 2")
+        if current < 3:
+            with self.connection:
+                self.connection.executescript(
+                    """
+                    CREATE TABLE sync_state (
+                        account TEXT PRIMARY KEY,
+                        last_sync_date TEXT,
+                        last_sync_email_id TEXT,
+                        total_processed INTEGER NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'idle',
+                        started_at TEXT,
+                        completed_at TEXT,
+                        chunk_size TEXT NOT NULL DEFAULT 'day'
+                    );
+                    """
+                )
+                self.connection.execute("UPDATE schema_version SET version = 3")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -248,6 +265,56 @@ class Database:
                         "INSERT INTO classifications(message_id, category, source, fingerprint, cached) VALUES (?, ?, ?, ?, ?)",
                         (message.id, category, source, message_fingerprint, cached),
                     )
+
+    def get_sync_state(self, account: str = "default") -> dict | None:
+        """Return the sync state row for an account, or None if never tracked."""
+        row = self.connection.execute(
+            "SELECT * FROM sync_state WHERE account = ?", (account,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def save_sync_state(
+        self,
+        account: str = "default",
+        *,
+        last_sync_date: str | None = None,
+        last_sync_email_id: str | None = None,
+        total_processed: int | None = None,
+        status: str | None = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
+        chunk_size: str | None = None,
+    ) -> None:
+        """Upsert sync state for an account, updating only the provided fields."""
+        fields = {
+            name: value
+            for name, value in {
+                "last_sync_date": last_sync_date,
+                "last_sync_email_id": last_sync_email_id,
+                "total_processed": total_processed,
+                "status": status,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "chunk_size": chunk_size,
+            }.items()
+            if value is not None
+        }
+        if not fields:
+            return
+        columns = ", ".join(fields)
+        placeholders = ", ".join("?" for _ in fields)
+        updates = ", ".join(f"{name} = excluded.{name}" for name in fields)
+        with self.transaction() as connection:
+            connection.execute(
+                f"INSERT INTO sync_state(account, {columns}) VALUES (?, {placeholders}) "
+                f"ON CONFLICT(account) DO UPDATE SET {updates}",
+                [account, *fields.values()],
+            )
+
+    def reset_sync_state(self, account: str = "default") -> None:
+        """Delete all sync state for an account so the next scan starts fresh."""
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM sync_state WHERE account = ?", (account,))
 
     def last_completed_sync(self):
         return self.connection.execute(

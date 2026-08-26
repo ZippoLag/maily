@@ -337,6 +337,81 @@ def test_scan_persists_processed_chunks_when_later_chunk_fails(tmp_path: Path):
     database.close()
 
 
+def test_scan_tracks_sync_state(tmp_path: Path):
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 2, 23, 59, 59, tzinfo=UTC)
+    scan(
+        FakeGmail([_message("m1", datetime(2024, 1, 2, tzinfo=UTC))]),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+        chunk_size="day",
+    )
+    state = database.get_sync_state()
+    assert state is not None
+    assert state["status"] == "degraded"  # no inference provider, matches scan status
+    assert state["chunk_size"] == "day"
+    # FakeGmail returns the message for each of the two day chunks
+    assert state["total_processed"] == 2
+    assert state["last_sync_date"] == "2024-01-02T23:59:59+00:00"
+    assert state["completed_at"] is not None
+    database.close()
+
+
+def test_scan_records_failed_sync_state(tmp_path: Path):
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 2, 23, 59, 59, tzinfo=UTC)
+    scan(
+        FakeGmail([], RuntimeError("offline")),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+        chunk_size="day",
+    )
+    state = database.get_sync_state()
+    assert state["status"] == "failed"
+    assert state["completed_at"] is not None
+    database.close()
+
+
+def test_historical_scan_does_not_duplicate_messages(tmp_path: Path):
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 1, 23, 59, 59, tzinfo=UTC)
+    message = _message("m1", start)
+    scan(
+        FakeGmail([message]),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+    )
+    scan(
+        FakeGmail([message]),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+    )
+    assert (
+        database.connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 1
+    )
+    assert (
+        database.connection.execute("SELECT COUNT(*) FROM threads").fetchone()[0] == 1
+    )
+    database.close()
+
+
 def test_failed_scan_keeps_last_completed_sync(tmp_path: Path):
     config = load_config(tmp_path / ".maily")
     database = Database(config.database_file)

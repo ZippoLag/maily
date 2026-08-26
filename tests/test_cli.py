@@ -8,6 +8,7 @@ import maily.tui
 from maily import cli
 from maily.cli import build_parser, main, render_human, run_scan
 from maily.config import load_config
+from maily.db import Database
 
 
 def test_human_output_shows_action_required_email_details():
@@ -257,6 +258,48 @@ def test_main_tui_friendly_error(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(maily.tui, "run_tui", boom)
     assert main(["--home", str(tmp_path / "home"), "tui"]) == 1
     assert "Install maily with the 'tui' extra" in capsys.readouterr().err
+
+
+def test_main_status_shows_sync_state(tmp_path, capsys):
+    config = load_config(tmp_path / "home")
+    database = Database(config.database_file)
+    database.save_sync_state(
+        status="completed",
+        last_sync_date="2024-01-02T00:00:00+00:00",
+        total_processed=5,
+        chunk_size="day",
+    )
+    database.close()
+    assert main(["--home", str(tmp_path / "home"), "status"]) == 0
+    out = capsys.readouterr().out
+    assert "Sync status: completed" in out
+    assert "Last sync date: 2024-01-02T00:00:00+00:00" in out
+    assert "Messages processed: 5" in out
+
+
+def test_main_status_empty(tmp_path, capsys):
+    assert main(["--home", str(tmp_path / "home"), "status"]) == 0
+    assert "No scan has run yet" in capsys.readouterr().out
+
+
+def test_main_status_reset_requires_confirmation(tmp_path, capsys, monkeypatch):
+    config = load_config(tmp_path / "home")
+    database = Database(config.database_file)
+    database.save_sync_state(status="running")
+    database.close()
+
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+    assert main(["--home", str(tmp_path / "home"), "status", "--reset"]) == 0
+    assert "Reset cancelled" in capsys.readouterr().out
+    database = Database(config.database_file)
+    assert database.get_sync_state() is not None
+    database.close()
+
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+    assert main(["--home", str(tmp_path / "home"), "status", "--reset"]) == 0
+    database = Database(config.database_file)
+    assert database.get_sync_state() is None
+    database.close()
 
 
 def test_main_scan_delegates(tmp_path, monkeypatch):

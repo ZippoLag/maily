@@ -8,6 +8,10 @@ from .models import ClassificationResult, ScanResult
 
 CHUNK_SIZES = ("day", "week", "month", "year")
 
+# v1 is single-account; sync state is tracked under this key until
+# multi-account support lands.
+SYNC_ACCOUNT = "default"
+
 
 def split_date_range(
     start: datetime, end: datetime, chunk_size: str = "day"
@@ -56,17 +60,25 @@ def scan(
     if batch_size < 1:
         raise ValueError(f"Invalid batch size: {batch_size} (must be >= 1)")
     started = iso_now()
+    database.save_sync_state(
+        status="running",
+        started_at=started,
+        chunk_size=chunk_size,
+        total_processed=0,
+        completed_at=None,
+        last_sync_date=None,
+    )
     run_id = database.connection.execute(
         "INSERT INTO sync_runs(started_at, window_start, window_end, status) VALUES (?, ?, ?, 'running')",
         (started, start.isoformat(), end.isoformat()),
     ).lastrowid
     database.connection.commit()
+    total_fetched = 0
     try:
         chunks = split_date_range(start, end, chunk_size)
         results: dict[str, ClassificationResult] = {}
         all_messages: list = []
         errors: list[str] = []
-        total_fetched = 0
         for chunk_index, (chunk_start, chunk_end) in enumerate(chunks):
             messages = gmail_client.fetch_messages(
                 chunk_start, chunk_end, include_read=include_read
@@ -131,12 +143,16 @@ def scan(
                         "errors": len(errors),
                     },
                 )
+            database.save_sync_state(
+                last_sync_date=chunk_end.isoformat(), total_processed=total_fetched
+            )
         with database.transaction() as connection:
             connection.execute(
                 "UPDATE sync_runs SET completed_at=?, status='completed', error=? WHERE id=?",
                 (iso_now(), "\n".join(errors) or None, run_id),
             )
         status = "degraded" if errors else "completed"
+        database.save_sync_state(status=status, completed_at=iso_now())
         return ScanResult(
             started,
             iso_now(),
@@ -152,6 +168,11 @@ def scan(
                 "UPDATE sync_runs SET completed_at=?, status='failed', error=? WHERE id=?",
                 (iso_now(), str(exc), run_id),
             )
+        database.save_sync_state(
+            status="failed",
+            completed_at=iso_now(),
+            total_processed=total_fetched,
+        )
         return ScanResult(
             started,
             iso_now(),
