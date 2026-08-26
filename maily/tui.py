@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .db import Database
+from .learning import accept_suggestion, reject_suggestion
 
 
 def grouped_rows(rows, categories, sort_field="last_received_at"):
@@ -36,6 +37,16 @@ def format_full_category_list(item: dict) -> str:
     return ", ".join(categories)
 
 
+def suggestion_list_text(suggestions) -> str:
+    """Render pending rule suggestions as a numbered list."""
+    if not suggestions:
+        return "No pending suggestions."
+    return "\n".join(
+        f"{i + 1}. [{suggestion['category']}] {suggestion['pattern']}"
+        for i, suggestion in enumerate(suggestions)
+    )
+
+
 def save_category_overrides(database: Database, message_ids: list[str], categories: list[str]) -> None:
     """Persist category overrides for multiple messages; empty list clears the override."""
     for message_id in message_ids:
@@ -67,6 +78,40 @@ def run_tui(config, as_json: bool = False) -> int:
                 Static(self.summary_text, classes="modal-content"),
                 Static("Press Escape to close", classes="modal-hint"),
             )
+
+    class SuggestionModal(ModalScreen):
+        """Modal to review and confirm pending rule learning suggestions."""
+
+        def __init__(self, suggestions, config_file, database):
+            super().__init__()
+            self.suggestions = list(suggestions)
+            self.config_file = config_file
+            self.database = database
+
+        def compose(self) -> ComposeResult:
+            self.content = Static(suggestion_list_text(self.suggestions), classes="modal-content")
+            yield Vertical(
+                Static("Rule Suggestions", classes="modal-title"),
+                self.content,
+                Static("'a' accept | 'r' reject | Escape close", classes="modal-hint"),
+            )
+
+        def _refresh(self) -> None:
+            self.content.update(suggestion_list_text(self.suggestions))
+
+        def on_key(self, event) -> None:
+            if event.key == "escape":
+                self.dismiss(None)
+            elif event.key in ("a", "r") and self.suggestions:
+                suggestion = self.suggestions[0]
+                if event.key == "a":
+                    accept_suggestion(self.database, self.config_file, suggestion["id"])
+                    self.app.notify(f"Accepted: {suggestion['pattern']}", title="Suggestions")
+                else:
+                    reject_suggestion(self.database, suggestion["id"])
+                    self.app.notify(f"Rejected: {suggestion['pattern']}", title="Suggestions")
+                self.suggestions = [s for s in self.suggestions if s["id"] != suggestion["id"]]
+                self._refresh()
 
     class CategoryTree(Tree):
         """Tree that shows the full category list for the hovered email row."""
@@ -124,6 +169,7 @@ def run_tui(config, as_json: bool = False) -> int:
             ("S", "summarize", "Summarize"),
             ("c", "edit_categories", "Edit categories"),
             ("m", "mark", "Mark/Unmark"),
+            ("p", "suggestions", "Rule suggestions"),
         ]
 
         def __init__(self):
@@ -244,6 +290,11 @@ Summary:"""
             else:
                 self.selected_email = None
                 self.selected_emails = []
+
+        def action_suggestions(self) -> None:
+            """Open the rule suggestion review modal."""
+            suggestions = self.database.get_rule_suggestions(status="pending")
+            self.push_screen(SuggestionModal(suggestions, config.home / "config.toml", self.database))
 
         def action_mark(self) -> None:
             """Mark or unmark the selected email for batch category editing."""

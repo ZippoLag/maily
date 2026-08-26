@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 from maily.db import Database
-from maily.tui import format_category_badges, format_full_category_list, grouped_rows, save_category_overrides, toggle_category
+from maily.tui import format_category_badges, format_full_category_list, grouped_rows, save_category_overrides, suggestion_list_text, toggle_category
 from maily.config import DEFAULT_CATEGORIES
 
 
@@ -100,6 +100,20 @@ def test_format_full_category_list_never_truncates():
     item = {"category": "Work", "categories": ["Work", "Personal", "Action Required", "Newsletters - technical", "Job search"]}
     full = format_full_category_list(item)
     assert full == "Work, Personal, Action Required, Newsletters - technical, Job search"
+
+
+def test_suggestion_list_text_shows_all_pending_suggestions():
+    suggestions = [
+        {"id": 1, "category": "Work", "pattern": "team", "count": 3},
+        {"id": 2, "category": "Action Required", "pattern": "invoice", "count": 4},
+    ]
+    text = suggestion_list_text(suggestions)
+    assert "1. [Work] team" in text
+    assert "2. [Action Required] invoice" in text
+
+
+def test_suggestion_list_text_empty():
+    assert suggestion_list_text([]) == "No pending suggestions."
 
 
 def test_format_full_category_list_falls_back_to_single_category():
