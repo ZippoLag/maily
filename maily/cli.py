@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 from . import __version__
@@ -101,10 +102,27 @@ def _normalize_last(value: str) -> str:
     return f"last {value.strip().lower()}"
 
 
-def _scan_window(config, start_date, end_date, last):
-    """Resolve the scan window from CLI overrides or the [scan] config."""
-    if not any((start_date, end_date, last)) and config.scan_date_range:
-        return parse_date_range(config.scan_date_range)
+def _scan_window(config, start_date, end_date, last, database=None):
+    """Resolve the scan window from CLI overrides, config, or resume state.
+
+    Priority: CLI flags, then the [scan] config date_range, then (when an
+    earlier scan was interrupted) resume from its last processed chunk
+    boundary, then today-only.
+    """
+    if not any((start_date, end_date, last)):
+        if config.scan_date_range:
+            return parse_date_range(config.scan_date_range)
+        if database is not None:
+            state = database.get_sync_state()
+            if (
+                state is not None
+                and state["status"] in ("running", "failed")
+                and state["last_sync_date"]
+            ):
+                resume_from = parse_date(state["last_sync_date"]) + timedelta(
+                    microseconds=1
+                )
+                return resume_from, config.local_today_bounds()[1]
     return resolve_scan_bounds(config, start_date, end_date, last)
 
 
@@ -180,7 +198,7 @@ def run_scan(
         provider = OllamaProvider(
             config.ollama_url, config.ollama_model, config.ollama_timeout_seconds
         )
-        start, end = _scan_window(config, start_date, end_date, last)
+        start, end = _scan_window(config, start_date, end_date, last, database)
         effective_include_read = (
             config.scan_include_read if include_read is None else include_read
         )

@@ -412,6 +412,64 @@ def test_historical_scan_does_not_duplicate_messages(tmp_path: Path):
     database.close()
 
 
+def test_interrupted_scan_state_restored_on_next_scan(tmp_path: Path):
+    """A failed scan leaves resume state; the next scan completes and updates it."""
+    config = load_config(tmp_path / ".maily")
+    database = Database(config.database_file)
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 2, 23, 59, 59, tzinfo=UTC)
+    chunk1 = datetime(2024, 1, 1, tzinfo=UTC)
+    chunk2 = datetime(2024, 1, 2, tzinfo=UTC)
+
+    class FlakyGmail:
+        def __init__(self, fail):
+            self.fail = fail
+            self.index = 0
+
+        def fetch_messages(self, start, end, include_read=False):
+            if self.index == 0:
+                self.index += 1
+                return [_message("m1", chunk1)]
+            if self.index == 1:
+                self.index += 1
+                if self.fail:
+                    raise RuntimeError("api outage")
+                return [_message("m2", chunk2)]
+            self.index += 1
+            return []
+
+    interrupted = scan(
+        FlakyGmail(fail=True),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+        chunk_size="day",
+    )
+    assert interrupted.status == "failed"
+    state = database.get_sync_state()
+    assert state["status"] == "failed"
+    assert state["last_sync_date"] == "2024-01-01T23:59:59.999999+00:00"
+    assert state["total_processed"] == 1
+
+    # Next scan (e.g. resumed) completes and updates the state.
+    completed = scan(
+        FlakyGmail(fail=False),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        start,
+        end,
+        chunk_size="day",
+    )
+    assert completed.status in ("completed", "degraded")
+    state = database.get_sync_state()
+    assert state["status"] == completed.status
+    assert state["total_processed"] == 2
+    assert state["last_sync_date"] == "2024-01-02T23:59:59+00:00"
+    database.close()
+
+
 def test_failed_scan_keeps_last_completed_sync(tmp_path: Path):
     config = load_config(tmp_path / ".maily")
     database = Database(config.database_file)

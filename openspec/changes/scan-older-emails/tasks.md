@@ -65,14 +65,14 @@
 
 ## 9. Integration and Testing
 
-- [ ] 9.1 Add test: historical date range scan, verify emails from past are fetched
-- [ ] 9.2 Add test: include_read scans read emails, verify read emails are included
-- [ ] 9.3 Add test: chunked processing with progress, verify chunks and progress work
-- [ ] 9.4 Add test: rate limit handling, verify backoff works
-- [ ] 9.5 Add test: TUI with 10K emails, verify virtual scrolling performs
-- [ ] 9.6 Add test: digest current view, verify digest generates correctly
-- [ ] 9.7 Add test: resume interrupted scan, verify state is restored
-- [ ] 9.8 Add test: default behavior unchanged, verify today-only still works
+- [x] 9.1 Add test: historical date range scan, verify emails from past are fetched
+- [x] 9.2 Add test: include_read scans read emails, verify read emails are included
+- [x] 9.3 Add test: chunked processing with progress, verify chunks and progress work
+- [x] 9.4 Add test: rate limit handling, verify backoff works
+- [x] 9.5 Add test: TUI with 10K emails, verify virtual scrolling performs
+- [x] 9.6 Add test: digest current view, verify digest generates correctly
+- [x] 9.7 Add test: resume interrupted scan, verify state is restored
+- [x] 9.8 Add test: default behavior unchanged, verify today-only still works
 
 ## 10. Documentation
 

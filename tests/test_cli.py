@@ -329,6 +329,105 @@ def test_run_scan_uses_config_scan_defaults(tmp_path, capsys, monkeypatch):
     assert captured["start"].date() == (now - timedelta(days=7)).date()
 
 
+def test_run_scan_resumes_from_interrupted_state(tmp_path, capsys, monkeypatch):
+    from datetime import UTC, datetime
+
+    config = load_config(tmp_path / "home")
+    database = Database(config.database_file)
+    database.save_sync_state(
+        status="failed",
+        last_sync_date="2024-01-10T23:59:59.999999+00:00",
+        total_processed=5,
+    )
+    database.close()
+    config = replace(config, oauth_client_file=tmp_path / "client.json")
+    monkeypatch.setattr(cli, "CredentialStore", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        cli, "authenticate", lambda *a, **k: (SimpleNamespace(), "me@example.com")
+    )
+    monkeypatch.setattr(cli, "OllamaProvider", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(cli, "Classifier", lambda *a, **k: SimpleNamespace())
+    captured = {}
+
+    def fake_scan(
+        gmail_client,
+        database,
+        classifier,
+        start,
+        end,
+        include_read=False,
+        chunk_size="day",
+        progress_callback=None,
+        batch_size=100,
+    ):
+        captured["start"] = start
+        return SimpleNamespace(
+            as_dict=lambda: {
+                "status": "completed",
+                "messages": [],
+                "categories": {},
+                "counts": {},
+                "historical_counts": {"deferred": False},
+                "errors": [],
+            }
+        )
+
+    monkeypatch.setattr(cli, "scan", fake_scan)
+    assert run_scan(config, as_json=True) == 0
+    capsys.readouterr()
+    # Resumes the day after the last processed chunk boundary.
+    assert captured["start"] == datetime(2024, 1, 11, tzinfo=UTC)
+
+
+def test_run_scan_does_not_resume_after_completed_scan(tmp_path, capsys, monkeypatch):
+    config = load_config(tmp_path / "home")
+    database = Database(config.database_file)
+    database.save_sync_state(
+        status="completed",
+        last_sync_date="2024-01-10T23:59:59.999999+00:00",
+        total_processed=5,
+    )
+    database.close()
+    config = replace(config, oauth_client_file=tmp_path / "client.json")
+    monkeypatch.setattr(cli, "CredentialStore", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        cli, "authenticate", lambda *a, **k: (SimpleNamespace(), "me@example.com")
+    )
+    monkeypatch.setattr(cli, "OllamaProvider", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(cli, "Classifier", lambda *a, **k: SimpleNamespace())
+    captured = {}
+
+    def fake_scan(
+        gmail_client,
+        database,
+        classifier,
+        start,
+        end,
+        include_read=False,
+        chunk_size="day",
+        progress_callback=None,
+        batch_size=100,
+    ):
+        captured["start"] = start
+        return SimpleNamespace(
+            as_dict=lambda: {
+                "status": "completed",
+                "messages": [],
+                "categories": {},
+                "counts": {},
+                "historical_counts": {"deferred": False},
+                "errors": [],
+            }
+        )
+
+    monkeypatch.setattr(cli, "scan", fake_scan)
+    assert run_scan(config, as_json=True) == 0
+    capsys.readouterr()
+    # A completed scan means today-only default (no resume).
+    today_start = config.local_today_bounds()[0]
+    assert captured["start"] == today_start
+
+
 def test_scan_help_documents_historical_options(capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["scan", "--help"])
