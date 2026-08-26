@@ -4,7 +4,7 @@
 
 ## Status
 
-maily is currently a v1 foundation. It supports one Gmail account, local SQLite state, deterministic classification, user-configurable classification rules, optional local Ollama classification, offline rule learning from category corrections, CLI JSON output, and a TUI with email summaries and category editing. Gmail mutations, historical synchronization, scheduling, and multiple accounts are not implemented yet.
+maily is currently a v1 foundation. It supports one Gmail account, local SQLite state, deterministic classification, user-configurable classification rules, optional local Ollama classification, offline rule learning from category corrections, CLI JSON output, and a TUI with email summaries and category editing. Scans can cover any historical date range with real-time progress reporting, date-chunked processing, and resumable sync state. Gmail mutations, scheduling, and multiple accounts are not implemented yet.
 
 ## Setup
 
@@ -40,18 +40,57 @@ maily init --oauth-client-file /path/to/client_secret.json
 
 On the first scan, a browser window opens for Google authorization. maily requests read-only Gmail access and stores the resulting token in the operating system credential store. Tokens are not written to `~/.maily/config.toml`, SQLite, or logs.
 
-## Daily Scan
+## Scan
 
-Run the initial today-focused scan manually:
+Run the today-focused scan manually:
 
 ```sh
 maily scan
 maily scan --json-format
 ```
 
-The scan retrieves unread Gmail messages received today in the configured local timezone. Older unread and read counts are reported as deferred until historical synchronization is added. If Ollama is available, unmatched messages are classified with the configured model; otherwise deterministic rules run and unresolved messages are assigned to `Other`.
+The scan retrieves unread Gmail messages received today in the configured local timezone. Older unread and read counts are reported as deferred until a historical scan has run. If Ollama is available, unmatched messages are classified with the configured model; otherwise deterministic rules run and unresolved messages are assigned to `Other`.
 
-The default configuration is written to `~/.maily/config.toml`. It includes the local Ollama endpoint, the `gemma4:e2b` model, a 20-second timeout, the required categories, and the classification inference setting. Edit configuration values there; maily preserves existing configuration on later launches.
+### Historical scans
+
+Any date range can be scanned, either as explicit dates or as a relative window:
+
+```sh
+maily scan --last 7days
+maily scan --start-date 2024-01-01 --end-date 2024-01-31
+maily scan --include-read --chunk-size week --verbose
+maily scan --debug
+```
+
+- `--start-date` / `--end-date` — explicit `YYYY-MM-DD` bounds; each defaults to today when omitted
+- `--last Ndays|Nweeks|Nmonths|Nyears` — relative window ending now
+- `--include-read` — include already-read emails (defaults to the `[scan]` config)
+- `--chunk-size day|week|month|year` — date chunk granularity for progress (default `day`)
+- `--verbose` — add processing rate and ETA to progress output
+- `--debug` — add per-chunk debug lines to progress output
+- `--json-format` — machine-readable output on stdout; progress is written to stderr and never pollutes the JSON
+
+Long scans stream email batches into the database chunk by chunk and report progress (percentage, current date chunk, counts, and optionally rate/ETA). If a scan is interrupted, `maily scan` resumes from the last processed chunk boundary on the next run.
+
+Inspect or reset sync state with:
+
+```sh
+maily status          # shows last sync date, status, and processed count
+maily status --reset  # asks for confirmation, then clears sync state
+```
+
+The default configuration is written to `~/.maily/config.toml`. It includes the local Ollama endpoint, the `gemma4:e2b` model, a 20-second timeout, the required categories, the classification inference setting, and a commented `[scan]` section. Edit configuration values there; maily preserves existing configuration on later launches.
+
+Persistent scan defaults can be set in `~/.maily/config.toml` under `[scan]`; CLI flags override them:
+
+```toml
+[scan]
+date_range = "last 30 days"   # "last 7 days", "this month", "2024-01-01:2024-01-31"
+include_read = false          # set true to include already-read emails
+chunk_size = "day"            # day | week | month | year
+```
+
+Invalid date ranges and unknown chunk sizes are rejected with a clear error when the config loads, so existing configurations without a `[scan]` section keep working unchanged.
 
 By default, local inference is disabled to minimize resource usage. To enable it, add the following to your `config.toml`:
 
@@ -134,6 +173,14 @@ Press **p** to review rule suggestions. maily analyzes your category corrections
 
 Suggestions persist across sessions until you act on them. Rule learning is fully offline and needs no inference.
 
+### Large Result Sets
+
+With thousands of emails, the tree groups each category by date (Today, Yesterday, Last Week, then month), shows the total count in the tree header, and paints lazily so navigation stays responsive. Email bodies are loaded from the database only when you expand the email. A progress bar is shown while the view loads.
+
+### View Digest
+
+Press **d** to summarize the emails currently visible in the tree: a count, a breakdown by category, and common themes. When inference is enabled, the digest is generated by Ollama; otherwise it falls back to deterministic counting and pattern matching. Digests are cached per view and shown in a modal — press **Escape** to dismiss. Scroll or change the sort order to digest a different view.
+
 ### Keyboard Shortcuts
 
 | Key | Action |
@@ -144,6 +191,9 @@ Suggestions persist across sessions until you act on them. Rule learning is full
 | `c` | Edit categories for selected email(s) |
 | `m` | Mark/unmark selected email for batch editing |
 | `p` | Review pending rule suggestions |
+| `d` | Digest the currently visible emails |
+| `Page Up` / `Page Down` | Scroll by one page |
+| `Home` / `End` | Jump to the first / last email |
 | `Enter` | Expand/collapse email |
 | `Escape` | Close modal |
 

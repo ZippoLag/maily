@@ -76,7 +76,7 @@
 
 ## 10. Documentation
 
-- [ ] 10.1 Update README.md with historical scan examples, verify docs are clear
-- [ ] 10.2 Add CLI argument documentation to README.md, verify all args documented
-- [ ] 10.3 Add config option documentation to README.md, verify options documented
-- [ ] 10.4 Add TUI navigation docs for large result sets, verify keyboard shortcuts documented
+- [x] 10.1 Update README.md with historical scan examples, verify docs are clear
+- [x] 10.2 Add CLI argument documentation to README.md, verify all args documented
+- [x] 10.3 Add config option documentation to README.md, verify options documented
+- [x] 10.4 Add TUI navigation docs for large result sets, verify keyboard shortcuts documented
