@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 from maily.db import Database
-from maily.tui import format_category_badges, grouped_rows, save_category_overrides, toggle_category
+from maily.tui import format_category_badges, format_full_category_list, grouped_rows, save_category_overrides, toggle_category
 from maily.config import DEFAULT_CATEGORIES
 
 
@@ -94,6 +94,16 @@ def test_format_category_badges_multiple():
 
 def test_format_category_badges_empty():
     assert format_category_badges([]) == ""
+
+
+def test_format_full_category_list_never_truncates():
+    item = {"category": "Work", "categories": ["Work", "Personal", "Action Required", "Newsletters - technical", "Job search"]}
+    full = format_full_category_list(item)
+    assert full == "Work, Personal, Action Required, Newsletters - technical, Job search"
+
+
+def test_format_full_category_list_falls_back_to_single_category():
+    assert format_full_category_list({"category": "Work"}) == "Work"
 
 
 def test_format_category_badges_truncates_with_more_indicator():

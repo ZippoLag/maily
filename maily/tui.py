@@ -30,6 +30,12 @@ def format_category_badges(categories: list[str], max_badges: int = 2) -> str:
     return f" [{label}]"
 
 
+def format_full_category_list(item: dict) -> str:
+    """Full, untruncated category list for an email row (tooltip/status)."""
+    categories = item.get("categories") or [item.get("category")]
+    return ", ".join(categories)
+
+
 def save_category_overrides(database: Database, message_ids: list[str], categories: list[str]) -> None:
     """Persist category overrides for multiple messages; empty list clears the override."""
     for message_id in message_ids:
@@ -61,6 +67,19 @@ def run_tui(config, as_json: bool = False) -> int:
                 Static(self.summary_text, classes="modal-content"),
                 Static("Press Escape to close", classes="modal-hint"),
             )
+
+    class CategoryTree(Tree):
+        """Tree that shows the full category list for the hovered email row."""
+
+        def watch_hover_line(self, previous_hover_line: int, hover_line: int) -> None:
+            if hover_line < 0:
+                self.tooltip = None
+                return
+            node = self._get_node(hover_line)
+            if node is not None and getattr(node, "data", None):
+                self.tooltip = f"Categories: {format_full_category_list(node.data)}"
+            else:
+                self.tooltip = None
 
     class CategoryEditModal(ModalScreen):
         """Modal screen to view and edit categories for selected emails."""
@@ -217,7 +236,9 @@ Summary:"""
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if event.node.data:
                 item = event.node.data
-                self.status.update(f"{item['sender_email']} | {item['subject']} | {item['received_at']}")
+                self.status.update(
+                    f"{item['sender_email']} | {item['subject']} | Categories: {format_full_category_list(item)}"
+                )
                 self.selected_email = item
                 self.selected_emails = [item]
             else:
@@ -274,7 +295,7 @@ Summary:"""
 
         def compose(self) -> ComposeResult:
             yield Header()
-            root = Tree("Today's unread mail")
+            root = CategoryTree("Today's unread mail")
             yield root
             yield self.status
             yield Static("Read-only browsing. Run maily scan to refresh data.")
