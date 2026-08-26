@@ -93,6 +93,183 @@ def test_browse_app_interactions(tmp_path):
     asyncio.run(exercise())
 
 
+def _seed_many(config, count: int, days_ago: int = 0) -> None:
+    db = Database(config.database_file)
+    db.seed_categories(config.categories)
+    rows = []
+    for i in range(count):
+        mid = f"m{i}"
+        rows.append(
+            (mid, mid, "Sender", "s@example.com", "example.com", f"Subj {i}", "", 0, 0)
+        )
+    db.connection.executemany(
+        "INSERT INTO threads(id, first_received_at, last_received_at) VALUES (?, ?, ?)",
+        [(mid, "2026-08-26T10:00:00", "2026-08-26T10:00:00") for mid, *_ in rows],
+    )
+    db.connection.executemany(
+        "INSERT INTO messages(id, thread_id, sender_name, sender_email, sender_domain, "
+        "subject, body, received_at, unread, is_spam, importance, synced_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, '2026-08-26T10:00:00')",
+        [
+            (mid, tid, name, email, dom, subj, body, "2026-08-26T10:00:00")
+            for mid, tid, name, email, dom, subj, body, _, _ in rows
+        ],
+    )
+    db.connection.executemany(
+        "INSERT INTO classifications(message_id, category, source, fingerprint, cached) "
+        "VALUES (?, 'Work', 'rules', 'fp', 0)",
+        [(mid,) for mid, *_ in rows],
+    )
+    db.connection.commit()
+    db.close()
+
+
+def _first_email_node(tree):
+    """Return the first email node in the populated category."""
+    for category in tree.root.children:
+        for bucket in category.children:
+            for email in bucket.children:
+                return email
+    raise AssertionError("no email node found")
+
+
+def test_tree_does_not_load_bodies_upfront(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            tree = app.query_one("#tree")
+            email_node = _first_email_node(tree)
+            assert email_node is not None
+            assert len(email_node.children) == 0  # body not loaded upfront
+
+    asyncio.run(exercise())
+
+
+def test_expanding_email_loads_body_lazily(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            tree = app.query_one("#tree")
+            await pilot.pause()
+            email_node = _first_email_node(tree)
+            assert len(email_node.children) == 0
+            email_node.expand()
+            await pilot.pause()
+            assert len(email_node.children) == 2
+            body_text = "".join(str(child.label) for child in email_node.children)
+            assert "Body text" in body_text
+            assert "From:" in body_text
+
+    asyncio.run(exercise())
+
+
+def test_rebuild_shows_result_count(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 3)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            tree = app.query_one("#tree")
+            assert "3" in str(tree.root.label)
+            assert app.email_count == 3
+
+    asyncio.run(exercise())
+
+
+def test_keyboard_navigation_scrolls_tree(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 200)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            tree = app.query_one("#tree")
+            tree.scroll_home(animate=False)
+            await pilot.pause()
+            assert tree.scroll_offset.y == 0
+            app.action_end()
+            await pilot.pause()
+            assert tree.scroll_offset.y > 0
+            top = tree.scroll_offset.y
+            app.action_page_up()
+            await pilot.pause()
+            assert tree.scroll_offset.y < top
+
+    asyncio.run(exercise())
+
+
+def test_emails_grouped_by_date_in_tree(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    config = load_config(tmp_path / "home")
+    db = Database(config.database_file)
+    db.seed_categories(config.categories)
+    now = datetime.now(UTC)
+    dates = {
+        "today": (now - timedelta(hours=1)).isoformat(),
+        "yesterday": (now - timedelta(days=1, hours=1)).isoformat(),
+        "old": (now - timedelta(days=40)).isoformat(),
+    }
+    for i, (key, received) in enumerate(dates.items()):
+        mid = f"m-{key}"
+        db.connection.execute("INSERT INTO threads(id) VALUES (?)", (mid,))
+        db.connection.execute(
+            "INSERT INTO messages(id, thread_id, sender_name, sender_email, sender_domain, "
+            "subject, body, received_at, unread, is_spam, importance, synced_at) "
+            "VALUES (?, ?, 'S', 's@e.com', 'e.com', ?, '', ?, 1, 0, NULL, '2026-08-26T10:00:00')",
+            (mid, mid, f"Subj {key}", received),
+        )
+        db.connection.execute(
+            "INSERT INTO classifications(message_id, category, source, fingerprint, cached) "
+            "VALUES (?, 'Work', 'rules', 'fp', 0)",
+            (mid,),
+        )
+    db.connection.commit()
+    db.close()
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            tree = app.query_one("#tree")
+            category_node = next(c for c in tree.root.children if c.children)
+            bucket_labels = [str(child.label) for child in category_node.children]
+            assert any(label.startswith("Today") for label in bucket_labels)
+            assert any(label.startswith("Yesterday") for label in bucket_labels)
+            expected_old = (now - timedelta(days=40)).strftime("%B %Y")
+            assert any(label.startswith(expected_old) for label in bucket_labels)
+
+    asyncio.run(exercise())
+
+
+def test_large_result_set_rebuilds(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 10000)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            tree = app.query_one("#tree")
+            app.rebuild()
+            await pilot.pause()
+            # All 10000 emails present under the single date bucket, bodies not preloaded
+            category_node = next(c for c in tree.root.children if c.children)
+            assert len(category_node.children[0].children) == 10000
+
+    asyncio.run(exercise())
+
+
 def test_tui_shows_progress_bar_during_rebuild(tmp_path):
     config = load_config(tmp_path / "home")
     _seed(config)

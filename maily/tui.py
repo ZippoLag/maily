@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 # Lazy Textual import: raises a friendly error when the 'tui' extra is
@@ -16,6 +17,23 @@ except ImportError as exc:
 
 from .db import Database
 from .learning import accept_suggestion, reject_suggestion
+
+
+def date_group_label(received_at: str, now: datetime | None = None) -> str:
+    """Bucket an ISO received_at into a human date group (Today/Yesterday/Last Week/Month Year)."""
+    parsed = datetime.fromisoformat(received_at)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    current = now or datetime.now(UTC)
+    today = current.date()
+    day = parsed.date()
+    if day == today:
+        return "Today"
+    if day == today - timedelta(days=1):
+        return "Yesterday"
+    if day > today - timedelta(days=7):
+        return "Last Week"
+    return parsed.strftime("%B %Y")
 
 
 def grouped_rows(rows, categories, sort_field="last_received_at"):
@@ -201,6 +219,10 @@ class BrowseApp(App):
         ("c", "edit_categories", "Edit categories"),
         ("m", "mark", "Mark/Unmark"),
         ("p", "suggestions", "Rule suggestions"),
+        ("pageup", "page_up", "Page Up"),
+        ("pagedown", "page_down", "Page Down"),
+        ("home", "home", "Home"),
+        ("end", "end", "End"),
     ]
 
     def __init__(self, config):
@@ -218,6 +240,7 @@ class BrowseApp(App):
         self.status = Static("Read-only browsing")
         self.selected_email = None
         self.selected_emails: list[dict] = []
+        self.email_count = 0
 
     def on_mount(self) -> None:
         self.rebuild()
@@ -227,20 +250,43 @@ class BrowseApp(App):
         tree.clear()
         rows = self.database.categorized_messages()
         grouped = grouped_rows(rows, self.config.categories, self.sort_field)
+        total_emails = sum(len(items) for items in grouped.values())
+        self.email_count = total_emails
+        tree.root.label = f"{total_emails} emails"
+        self.status.update(f"Read-only browsing | {total_emails} emails")
         progress = self.query_one("#load-progress", ProgressBar)
         progress.display = True
         progress.total = len(grouped)
         progress.progress = 0
         for index, (category, items) in enumerate(grouped.items()):
             category_node = tree.root.add(f"{category} ({len(items)})")
+            buckets: dict[str, list[dict]] = {}
             for item in items:
-                self._add_email_node(category_node, item)
+                buckets.setdefault(date_group_label(item["received_at"]), []).append(
+                    item
+                )
+            for bucket, bucket_items in buckets.items():
+                bucket_node = category_node.add(f"{bucket} ({len(bucket_items)})")
+                for item in bucket_items:
+                    self._add_email_node(bucket_node, item)
             progress.progress = index + 1
         tree.root.expand()
+        self._expand_group_nodes(tree.root)
         progress.display = False
 
+    def _expand_group_nodes(self, node) -> None:
+        """Expand category and date-bucket nodes so emails are visible.
+
+        Email nodes (which carry item data) stay collapsed: their sender and
+        body details load lazily when the user expands them.
+        """
+        for child in node.children:
+            if child.data is None:
+                child.expand()
+                self._expand_group_nodes(child)
+
     def _add_email_node(self, parent_node, item):
-        """Add an email node that can be expanded to show sender and body."""
+        """Add an email node; sender/body details load lazily on first expand."""
         from .models import primary_category
 
         subject = item.get("subject") or "(no subject)"
@@ -260,16 +306,19 @@ class BrowseApp(App):
             f"{primary_prefix}{sender_label}: {subject}{badge_suffix}",
             data=dict(item),
         )
-
-        body = item.get("body", "") or "(no body)"
-        if isinstance(body, str):
-            body = body.replace("\n", " ")[:1000]
-        sender_display = f"From: {sender_name or '(unknown)'} <{sender_email}>"
-
-        email_node.add(f"[dim]{sender_display}[/dim]")
-        email_node.add(f"{body}")
-
         email_node.allow_expand = True
+
+    def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
+        """Lazily load sender/body details for an email node on first expand."""
+        node = event.node
+        if not node.data or node.children:
+            return
+        item = node.data
+        body = self.database.get_message_body(item["id"])
+        sender_name = item.get("sender_name") or "(unknown)"
+        sender_email = item.get("sender_email") or ""
+        node.add(f"[dim]From: {sender_name} <{sender_email}>[/dim]")
+        node.add(f"{(body or '(no body)').replace(chr(10), ' ')[:1000]}")
 
     def action_sort(self) -> None:
         self.sort_field = self.sort_fields[
@@ -349,6 +398,18 @@ Summary:"""
             self.selected_email = None
             self.selected_emails = []
 
+    def action_page_up(self) -> None:
+        self.query_one(Tree).scroll_page_up(animate=False)
+
+    def action_page_down(self) -> None:
+        self.query_one(Tree).scroll_page_down(animate=False)
+
+    def action_home(self) -> None:
+        self.query_one(Tree).scroll_home(animate=False)
+
+    def action_end(self) -> None:
+        self.query_one(Tree).scroll_end(animate=False)
+
     def action_suggestions(self) -> None:
         """Open the rule suggestion review modal."""
         suggestions = self.database.get_rule_suggestions(status="pending")
@@ -417,7 +478,7 @@ Summary:"""
 
     def compose(self) -> ComposeResult:
         yield Header()
-        root = CategoryTree("Today's unread mail")
+        root = CategoryTree("Today's unread mail", id="tree")
         yield root
         yield self.status
         yield ProgressBar(id="load-progress", show_eta=False, show_percentage=True)

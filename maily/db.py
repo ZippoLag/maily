@@ -368,6 +368,13 @@ class Database:
                 result.append(row)
         return result
 
+    def get_message_body(self, message_id: str) -> str:
+        """Return the stored body for a message (empty string when unknown)."""
+        row = self.connection.execute(
+            "SELECT body FROM messages WHERE id = ?", (message_id,)
+        ).fetchone()
+        return row[0] if row else ""
+
     def get_summary(self, message_id: str, fingerprint: str) -> str | None:
         """Get cached summary for a message if it exists."""
         row = self.connection.execute(

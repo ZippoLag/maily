@@ -47,12 +47,12 @@
 
 ## 7. TUI Updates
 
-- [ ] 7.1 Implement virtual scrolling in BrowseApp, verify performance with 10K emails
-- [ ] 7.2 Add lazy loading for email bodies, verify bodies load on expand
-- [ ] 7.3 Add result count display (e.g., "1-50 of 5000"), verify count updates correctly
-- [ ] 7.4 Add keyboard navigation (Page Up/Down, Home/End), verify navigation works
-- [ ] 7.5 Add date-based grouping in tree, verify emails grouped by date
-- [ ] 7.6 Add progress bar display during scan, verify progress is visible
+- [x] 7.1 Implement virtual scrolling in BrowseApp, verify performance with 10K emails
+- [x] 7.2 Add lazy loading for email bodies, verify bodies load on expand
+- [x] 7.3 Add result count display (e.g., "1-50 of 5000"), verify count updates correctly
+- [x] 7.4 Add keyboard navigation (Page Up/Down, Home/End), verify navigation works
+- [x] 7.5 Add date-based grouping in tree, verify emails grouped by date
+- [x] 7.6 Add progress bar display during scan, verify progress is visible
 
 ## 8. Digest Current View
 

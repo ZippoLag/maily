@@ -218,6 +218,19 @@ def test_save_category_overrides_empty_clears_override():
         db_path.unlink()
 
 
+def test_date_group_label_buckets():
+    from datetime import UTC, datetime
+
+    from maily.tui import date_group_label
+
+    now = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+    assert date_group_label("2026-08-26T10:00:00+00:00", now) == "Today"
+    assert date_group_label("2026-08-25T10:00:00+00:00", now) == "Yesterday"
+    assert date_group_label("2026-08-20T10:00:00+00:00", now) == "Last Week"
+    assert date_group_label("2026-07-15T10:00:00+00:00", now) == "July 2026"
+    assert date_group_label("2025-12-01T10:00:00+00:00", now) == "December 2025"
+
+
 def test_grouped_rows_handles_empty_body():
     """Test that grouped_rows handles rows with empty body."""
     rows = [
