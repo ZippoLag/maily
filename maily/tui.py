@@ -56,14 +56,20 @@ def save_category_overrides(database: Database, message_ids: list[str], categori
             database.delete_user_override(message_id)
 
 
-def run_tui(config, as_json: bool = False) -> int:
+def _load_textual():
+    """Import the Textual classes used by the TUI, with a friendly error when unavailable."""
     try:
         from textual.app import App, ComposeResult
-        from textual.widgets import Checkbox, Footer, Header, Static, Tree
         from textual.containers import Vertical
-        from textual.widgets import ModalScreen
+        from textual.screen import ModalScreen
+        from textual.widgets import Checkbox, Footer, Header, Static, Tree
+        return App, ComposeResult, Checkbox, Footer, Header, Static, Tree, Vertical, ModalScreen
     except ImportError as exc:
         raise RuntimeError("Install maily with the 'tui' extra to use the TUI") from exc
+
+
+def run_tui(config, as_json: bool = False) -> int:
+    App, ComposeResult, Checkbox, Footer, Header, Static, Tree, Vertical, ModalScreen = _load_textual()
 
     class SummaryModal(ModalScreen):
         """Modal screen to display email summary."""

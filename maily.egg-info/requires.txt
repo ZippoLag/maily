@@ -1,6 +1,7 @@
 
 [dev]
 pytest>=8.3.0
+textual>=0.80.0
 
 [gmail]
 google-api-python-client>=2.150.0

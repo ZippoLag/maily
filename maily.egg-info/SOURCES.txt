@@ -8,6 +8,7 @@ maily/cli.py
 maily/config.py
 maily/db.py
 maily/gmail.py
+maily/learning.py
 maily/models.py
 maily/ollama.py
 maily/secrets.py
@@ -21,9 +22,14 @@ maily.egg-info/requires.txt
 maily.egg-info/top_level.txt
 tests/test_auth.py
 tests/test_classifier.py
+tests/test_cli.py
+tests/test_config.py
 tests/test_gmail.py
+tests/test_integration.py
+tests/test_learning.py
 tests/test_local_state.py
 tests/test_presentation.py
 tests/test_secrets.py
 tests/test_smoke.py
 tests/test_sync.py
+tests/test_tui.py

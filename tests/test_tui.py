@@ -1,8 +1,20 @@
+import builtins
 import tempfile
 from pathlib import Path
-from maily.db import Database
-from maily.tui import format_category_badges, format_full_category_list, grouped_rows, save_category_overrides, suggestion_list_text, toggle_category
+
+import pytest
+
 from maily.config import DEFAULT_CATEGORIES
+from maily.db import Database
+from maily.tui import (
+    _load_textual,
+    format_category_badges,
+    format_full_category_list,
+    grouped_rows,
+    save_category_overrides,
+    suggestion_list_text,
+    toggle_category,
+)
 
 
 def test_database_summary_cache():
@@ -52,6 +64,27 @@ def test_grouped_rows_handles_empty_categories():
     assert [row["subject"] for row in grouped["Work"]] == ["Test"]
     assert grouped["Personal"] == []
     assert grouped["Other"] == []
+
+
+def test_tui_textual_imports_resolve():
+    """The lazy Textual imports used by the TUI must resolve (regression: ModalScreen lives in textual.screen)."""
+    from textual.screen import ModalScreen as ScreenModal
+    App, ComposeResult, Checkbox, Footer, Header, Static, Tree, Vertical, ModalScreen = _load_textual()
+    assert ModalScreen is ScreenModal
+    assert App is not None and Tree is not None and Vertical is not None
+
+
+def test_tui_missing_textual_raises_friendly_error(monkeypatch):
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "textual" or name.startswith("textual."):
+            raise ImportError("no textual installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(RuntimeError, match="extra to use the TUI"):
+        _load_textual()
 
 
 def test_toggle_category_adds_when_absent():
