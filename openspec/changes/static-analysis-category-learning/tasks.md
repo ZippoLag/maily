@@ -10,7 +10,7 @@
 - [x] 2.1 Update Classifier.__init__ to accept rule loading from config, verify Classifier can be instantiated with user rules
 - [x] 2.2 Modify Rule.matches() to track which specific patterns matched, verify matched patterns are recorded
 - [x] 2.3 Update ClassificationResult to include matched_rules field, verify rules are tracked in results
-- [ ] 2.4 Add primary category selection logic - first matched rule or first user category, verify with test that primary is selected correctly
+- [x] 2.4 Add primary category selection logic - first matched rule or first user category, verify with test that primary is selected correctly
 - [x] 2.5 Update classifier.classify() to separate rule matching from inference, verify deterministic rules run before inference
 
 ## 3. Database Schema Updates
