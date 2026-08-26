@@ -29,11 +29,11 @@ class Rule:
     patterns: tuple[str, ...]
     fields: tuple[str, ...] = ("subject", "body", "sender_email")
 
-    def matches(self, message: Any) -> bool:
-        """Check if message matches any of the rule's patterns."""
+    def matches(self, message: Any) -> tuple[str, ...]:
+        """Return the rule's patterns that matched the message, empty tuple if none."""
         values = [getattr(message, field, "") for field in self.fields]
         haystack = "\n".join(values).lower()
-        return any(re.search(pattern, haystack, re.IGNORECASE) for pattern in self.patterns)
+        return tuple(pattern for pattern in self.patterns if re.search(pattern, haystack, re.IGNORECASE))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize rule to dictionary."""
