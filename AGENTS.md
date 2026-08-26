@@ -1,4 +1,6 @@
-Always use `pnpm`, never use `npm`. Always use `pnpx`, never use `npx`.
+## Operational rules
+- Always use `pnpm`, never use `npm`. Always use `pnpx`, never use `npx`.
+- Bump version number coherently: minor upon each task completion, major upon each spec archived.
 
 
 <!-- BEGIN OPENLORE (managed — edits inside this block will be overwritten) -->
