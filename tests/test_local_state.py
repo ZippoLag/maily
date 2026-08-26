@@ -28,6 +28,19 @@ def test_database_creates_user_category_overrides_table(tmp_path: Path):
     database.close()
 
 
+def test_database_creates_learned_rule_suggestions_table(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    table = database.connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'learned_rule_suggestions'"
+    ).fetchone()
+    assert table is not None
+    columns = {
+        row[1] for row in database.connection.execute("PRAGMA table_info(learned_rule_suggestions)")
+    }
+    assert {"pattern", "category", "source_message_id", "confidence", "status"}.issubset(columns)
+    database.close()
+
+
 def test_config_parses_inference_enabled_default(tmp_path: Path):
     config = load_config(tmp_path / ".maily")
     assert config.inference_enabled == False
