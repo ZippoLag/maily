@@ -302,6 +302,11 @@ def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
         ).fetchone()
         assert row is not None
+    # email_summaries table created by v3 migration
+    row = database.connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'email_summaries'"
+    ).fetchone()
+    assert row is not None
     assert (
         database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
         == 3
@@ -326,3 +331,45 @@ oauth_client_file = ""
 """)
     config = load_config(config_dir)
     assert config.inference_enabled == True
+
+
+def test_generate_summary_degrades_when_cache_fails(tmp_path: Path):
+    """When the summary cache table is missing, _generate_summary returns preview."""
+    import asyncio
+
+    from maily.tui import BrowseApp
+
+    config = load_config(tmp_path / ".maily")
+    db = Database(config.database_file)
+    db.seed_categories(tuple(config.categories))
+    db.connection.execute("INSERT INTO threads(id) VALUES ('t1')")
+    db.connection.execute(
+        "INSERT INTO messages(id, thread_id, sender_name, sender_email, "
+        "subject, body, received_at, unread, is_spam, synced_at) "
+        "VALUES ('m1', 't1', 'Bob', 'bob@example.com', 'Re: Hello', "
+        "'Long body text that exceeds two hundred characters "
+        "and should be truncated in the preview output shown to the user', "
+        "'2026-08-27T10:00:00', 1, 0, '2026-08-27T10:00:00')"
+    )
+    db.connection.commit()
+    # Drop the email_summaries table to simulate a pre-v3 database
+    db.connection.execute("DROP TABLE IF EXISTS email_summaries")
+    db.connection.commit()
+    db.close()
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test():
+            email_data = {
+                "id": "m1",
+                "body": "Long body text that exceeds two hundred characters "
+                "and should be truncated in the preview output shown to the user",
+                "sender_name": "Bob",
+                "sender_email": "bob@example.com",
+                "subject": "Re: Hello",
+            }
+            result = app._generate_summary(email_data)
+            assert result.startswith("Preview:")
+            assert "truncated" in result
+
+    asyncio.run(exercise())

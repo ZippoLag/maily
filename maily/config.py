@@ -215,7 +215,6 @@ def load_config(home: Path | None = None) -> MailyConfig:
     state_home = (home or default_home()).expanduser()
     state_home.mkdir(mode=0o700, parents=True, exist_ok=True)
     state_home.chmod(0o700)
-    (state_home / "logs").mkdir(mode=0o700, exist_ok=True)
     config_file = state_home / "config.toml"
     if not config_file.exists():
         _write_default_config(config_file)

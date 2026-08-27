@@ -125,7 +125,7 @@ class Database:
             with self.connection:
                 self.connection.executescript(
                     """
-                    CREATE TABLE sync_state (
+                    CREATE TABLE IF NOT EXISTS sync_state (
                         account TEXT PRIMARY KEY,
                         last_sync_date TEXT,
                         last_sync_email_id TEXT,
@@ -135,6 +135,14 @@ class Database:
                         completed_at TEXT,
                         chunk_size TEXT NOT NULL DEFAULT 'day'
                     );
+                    CREATE TABLE IF NOT EXISTS email_summaries (
+                        message_id TEXT PRIMARY KEY,
+                        summary TEXT NOT NULL,
+                        model TEXT NOT NULL DEFAULT '',
+                        fingerprint TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS summaries_message_idx ON email_summaries(message_id);
                     """
                 )
                 self.connection.execute("UPDATE schema_version SET version = 3")

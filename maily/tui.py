@@ -163,6 +163,37 @@ def save_category_overrides(
             database.delete_user_override(message_id)
 
 
+def email_pane_text(item: dict, width: int = 80) -> str:
+    """Compose sender/subject/body text for the reading pane, wrapping to *width*.
+
+    Preserves stored paragraph breaks.  Returns '(no body)' when the body is
+    empty or missing.
+    """
+    import textwrap
+
+    sender_name = item.get("sender_name") or ""
+    sender_email = item.get("sender_email") or ""
+    subject = item.get("subject") or "(no subject)"
+    body = item.get("body") or ""
+
+    header = f"From: {sender_name} <{sender_email}>\nSubject: {subject}"
+
+    if not body:
+        return f"{header}\n\n(no body)"
+
+    # Wrap each paragraph independently, then rejoin with blank lines.
+    paragraphs = body.split("\n")
+    wrapped_parts: list[str] = []
+    for para in paragraphs:
+        if para.strip() == "":
+            wrapped_parts.append("")
+        else:
+            wrapped_parts.append(textwrap.fill(para, width=width))
+    wrapped_body = "\n".join(wrapped_parts)
+
+    return f"{header}\n\n{wrapped_body}"
+
+
 class SummaryModal(ModalScreen):
     """Modal screen to display email summary."""
 
@@ -333,6 +364,7 @@ class BrowseApp(App):
         ]
         self.database = Database(config.database_file)
         self.status = Static("Read-only browsing")
+        self.reading_pane = Static("Select an email to read.", id="reading-pane")
         self.selected_email = None
         self.selected_emails: list[dict] = []
         self.email_count = 0
@@ -398,8 +430,10 @@ class BrowseApp(App):
             else ""
         )
         primary_prefix = f"[{primary}] " if primary else ""
+        is_marked = item in self.selected_emails
+        mark_prefix = "[X] " if is_marked else "[ ] "
         email_node = parent_node.add(
-            f"{primary_prefix}{sender_label}: {subject}{badge_suffix}",
+            f"{mark_prefix}{primary_prefix}{sender_label}: {subject}{badge_suffix}",
             data=dict(item),
         )
         email_node.allow_expand = True
@@ -444,9 +478,12 @@ class BrowseApp(App):
 
         fingerprint = hash(f"{message_id}:{body}")
 
-        cached = self.database.get_summary(message_id, str(fingerprint))
-        if cached:
-            return cached
+        try:
+            cached = self.database.get_summary(message_id, str(fingerprint))
+            if cached:
+                return cached
+        except Exception:  # noqa: BLE001, S110 - degrade on cache failure
+            pass
 
         summary_prompt = f"""Summarize this email in 2-3 sentences. Focus on action items, key information, and sender intent.
 
@@ -467,9 +504,12 @@ Summary:"""
             )
             if self.config.inference_enabled:
                 summary = provider.generate(summary_prompt)
-                self.database.store_summary(
-                    message_id, summary, self.config.ollama_model, str(fingerprint)
-                )
+                try:
+                    self.database.store_summary(
+                        message_id, summary, self.config.ollama_model, str(fingerprint)
+                    )
+                except Exception:  # noqa: BLE001, S110 - degrade on cache failure
+                    pass
                 return summary
         except Exception:  # noqa: BLE001, S110 - degraded fallback when inference is unavailable
             pass
@@ -479,7 +519,10 @@ Summary:"""
         else:
             summary = f"Preview: {body[:200]}... (truncated)"
 
-        self.database.store_summary(message_id, summary, "", str(fingerprint))
+        try:
+            self.database.store_summary(message_id, summary, "", str(fingerprint))
+        except Exception:  # noqa: BLE001, S110 - degrade on cache failure
+            pass
         return summary
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
@@ -490,9 +533,36 @@ Summary:"""
             )
             self.selected_email = item
             self.selected_emails = [item]
+            self._update_reading_pane(item)
         else:
             self.selected_email = None
             self.selected_emails = []
+            self.reading_pane.update("Select an email to read.")
+
+    def _update_reading_pane(self, item: dict) -> None:
+        """Populate the reading pane with the selected email's content."""
+        width = self.reading_pane.size.width or 80
+        self.reading_pane.update(email_pane_text(item, width=width))
+
+    def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
+        """Update focused email when the user navigates the tree."""
+        if event.node.data:
+            self.selected_email = event.node.data
+            item = event.node.data
+            categories_str = format_full_category_list(item)
+            if self.selected_emails:
+                self.status.update(
+                    f"{len(self.selected_emails)} marked | "
+                    f"{item['sender_email']} | {item['subject']} | Categories: {categories_str}"
+                )
+            else:
+                self.status.update(
+                    f"{item['sender_email']} | {item['subject']} | Categories: {categories_str}"
+                )
+            self._update_reading_pane(item)
+        else:
+            self.selected_email = None
+            self.reading_pane.update("Select an email to read.")
 
     def _visible_email_nodes(self, tree):
         """Return the email rows currently visible in the tree viewport."""
@@ -571,6 +641,7 @@ Summary:"""
             self.status.update(
                 f"Marked {item.get('subject')} ({len(self.selected_emails)} selected)"
             )
+        self.rebuild()
 
     def action_edit_categories(self) -> None:
         """Open the category edit modal for the selected email(s)."""
@@ -616,6 +687,7 @@ Summary:"""
         yield Header()
         root = CategoryTree("Today's unread mail", id="tree")
         yield root
+        yield self.reading_pane
         yield self.status
         yield ProgressBar(id="load-progress", show_eta=False, show_percentage=True)
         yield Static(
