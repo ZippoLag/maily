@@ -123,6 +123,13 @@ class MailyConfig:
     scan_date_range: str | None = None
     scan_include_read: bool = False
     scan_chunk_size: str = "day"
+    scan_long_running: bool = False
+    scan_batch_size: int = 100
+    scan_checkpoint_emails: int = 100
+    scan_max_retries: int = 5
+    performance_memory_limit_mb: int | None = None
+    performance_body_cache_size: int = 500
+    suggestions_confidence_threshold: float = 0.0
 
     @property
     def database_file(self) -> Path:
@@ -203,6 +210,17 @@ inference_enabled = false
 # date_range = "last 30 days"   # "last 7 days", "this month", "2024-01-01:2024-01-31"
 # include_read = false          # set true to include already-read emails
 # chunk_size = "day"            # day | week | month | year
+# long_running = false          # prevent concurrent scans and save progress on interrupt
+# batch_size = 100              # emails processed per classify/commit batch
+# checkpoint_emails = 100       # sync progress is saved after every N emails
+# max_retries = 5               # Gmail rate-limit retries before giving up
+
+[performance]
+# memory_limit_mb = 1024        # warn when the scan process approaches this RSS limit
+# body_cache_size = 500         # LRU cache size for lazily loaded email bodies
+
+[suggestions]
+# confidence_threshold = 0.0    # only show batch suggestions at/above this confidence
 
 [gmail]
 oauth_client_file = ""
@@ -238,6 +256,21 @@ def load_config(home: Path | None = None) -> MailyConfig:
     scan_include_read = scan.get("include_read", False)
     scan_chunk_size = scan.get("chunk_size", "day")
     validate_scan_config(scan_date_range, scan_include_read, scan_chunk_size)
+    scan_long_running = scan.get("long_running", False)
+    scan_batch_size = int(scan.get("batch_size", 100))
+    if scan_batch_size < 1:
+        raise ValueError("Invalid scan.batch_size: must be >= 1")
+    scan_checkpoint_emails = int(scan.get("checkpoint_emails", 100))
+    scan_max_retries = int(scan.get("max_retries", 5))
+    if scan_max_retries < 0:
+        raise ValueError("Invalid scan.max_retries: must be >= 0")
+
+    performance = raw.get("performance", {})
+    memory_limit_mb = performance.get("memory_limit_mb")
+    body_cache_size = int(performance.get("body_cache_size", 500))
+
+    suggestions = raw.get("suggestions", {})
+    confidence_threshold = float(suggestions.get("confidence_threshold", 0.0))
 
     return MailyConfig(
         home=state_home,
@@ -252,4 +285,11 @@ def load_config(home: Path | None = None) -> MailyConfig:
         scan_date_range=scan_date_range,
         scan_include_read=scan_include_read,
         scan_chunk_size=scan_chunk_size,
+        scan_long_running=scan_long_running,
+        scan_batch_size=scan_batch_size,
+        scan_checkpoint_emails=scan_checkpoint_emails,
+        scan_max_retries=scan_max_retries,
+        performance_memory_limit_mb=memory_limit_mb,
+        performance_body_cache_size=body_cache_size,
+        suggestions_confidence_threshold=confidence_threshold,
     )

@@ -54,6 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Date chunk size for progress reporting (day/week/month/year)",
     )
     scan_parser.add_argument(
+        "--long-running",
+        action="store_true",
+        help="Long-running mode: lock against concurrent scans and save progress on interrupt",
+    )
+    scan_parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="Emails processed per classify/commit batch (defaults to the [scan] config)",
+    )
+    scan_parser.add_argument(
         "--verbose",
         action="store_true",
         help="Show processing rate and ETA in progress output",
@@ -225,6 +235,8 @@ def run_scan(
     last=None,
     include_read: bool | None = None,
     chunk_size: str | None = None,
+    long_running: bool = False,
+    batch_size: int | None = None,
 ) -> int:
     database = Database(config.database_file)
     database.seed_categories(config.categories)
@@ -259,6 +271,12 @@ def run_scan(
             include_read=effective_include_read,
             chunk_size=effective_chunk_size,
             progress_callback=reporter.update,
+            batch_size=batch_size or config.scan_batch_size,
+            long_running=long_running or config.scan_long_running,
+            checkpoint_emails=config.scan_checkpoint_emails,
+            max_retries=config.scan_max_retries,
+            logs_dir=config.logs_dir,
+            memory_limit_mb=config.performance_memory_limit_mb,
         )
         payload = result.as_dict()
         payload["account"] = account
@@ -367,6 +385,8 @@ def main(argv: list[str] | None = None) -> int:
             last=args.last,
             include_read=args.include_read,
             chunk_size=args.chunk_size,
+            long_running=args.long_running,
+            batch_size=args.batch_size,
         )
     if args.command == "status":
         return run_status(config, args.reset)

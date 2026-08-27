@@ -329,7 +329,10 @@ def test_scan_persists_processed_chunks_when_later_chunk_fails(tmp_path: Path):
         end,
         chunk_size="day",
     )
-    assert result.status == "failed"
+    # Continue-on-error: the later chunk failure is recorded and the scan
+    # completes with a degraded (partial) status.
+    assert result.status == "degraded"
+    assert any("api outage" in error for error in result.errors)
     # Both processed chunks were committed before the failure
     assert (
         database.connection.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 2
@@ -447,9 +450,11 @@ def test_interrupted_scan_state_restored_on_next_scan(tmp_path: Path):
         end,
         chunk_size="day",
     )
-    assert interrupted.status == "failed"
+    # Continue-on-error: the interrupted chunk records an error and the scan
+    # completes as degraded (partial) with the processed chunk committed.
+    assert interrupted.status == "degraded"
     state = database.get_sync_state()
-    assert state["status"] == "failed"
+    assert state["status"] == "degraded"
     assert state["last_sync_date"] == "2024-01-01T23:59:59.999999+00:00"
     assert state["total_processed"] == 1
 

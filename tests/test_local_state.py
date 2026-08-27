@@ -21,7 +21,7 @@ def test_database_migrates_and_seeds_categories(tmp_path: Path):
     )
     assert (
         database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
-        == 4
+        == 5
     )
     database.close()
 
@@ -312,7 +312,7 @@ def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
     assert any(row["name"] == "labels" for row in labels_col)
     assert (
         database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
-        == 4
+        == 5
     )
     database.close()
 

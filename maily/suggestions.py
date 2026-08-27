@@ -81,18 +81,36 @@ def _categorize_suggestion(
     )
 
 
+def sample_for_analysis(emails: list[dict], limit: int = 200) -> list[dict]:
+    """Return a bounded sample of emails for analysis on very large selections.
+
+    Analysis stays cheap for 10k+ selections while suggestions still describe
+    the overall pattern. When the selection fits, it is returned unchanged.
+    """
+    if len(emails) <= limit:
+        return emails
+    step = len(emails) / limit
+    return [emails[int(i * step)] for i in range(limit)]
+
+
 def generate_suggestions(
-    emails: list[dict], infer: Callable[[str], str] | None = None
+    emails: list[dict],
+    infer: Callable[[str], str] | None = None,
+    confidence_threshold: float = 0.0,
+    sample_limit: int = 200,
 ) -> list[Suggestion]:
     """Generate batch action suggestions for a selection of emails.
 
     Deterministic pattern matching runs first. When *infer* is provided it may
     add an AI-identified pattern; failures fall back to deterministic results.
+    Selections larger than *sample_limit* are sampled for analysis, and
+    suggestions below *confidence_threshold* are dropped.
     """
     if not emails:
         return []
+    analysis_set = sample_for_analysis(emails, sample_limit)
     total = len(emails)
-    summary = analyze_batch(emails)
+    summary = analyze_batch(analysis_set)
     suggestions: list[Suggestion] = []
 
     # Dominant sender → categorize together.
@@ -220,6 +238,8 @@ def generate_suggestions(
         except Exception:  # noqa: BLE001, S110 - inference is best-effort
             pass
 
+    if confidence_threshold > 0.0:
+        suggestions = [s for s in suggestions if s.confidence >= confidence_threshold]
     return suggestions
 
 

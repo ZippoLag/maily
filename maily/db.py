@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import json
 import sqlite3
 from collections.abc import Iterator
@@ -7,12 +8,14 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class Database:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, body_cache_size: int = 500):
         self.path = path
+        self.body_cache_size = max(0, body_cache_size)
+        self._body_cache: collections.OrderedDict[str, str] = collections.OrderedDict()
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.connection = sqlite3.connect(path)
         self.connection.row_factory = sqlite3.Row
@@ -153,6 +156,24 @@ class Database:
                     "ALTER TABLE messages ADD COLUMN labels TEXT NOT NULL DEFAULT ''"
                 )
                 self.connection.execute("UPDATE schema_version SET version = 4")
+        if current < 5:
+            with self.connection:
+                # Accepted-but-unexecuted Gmail mutation suggestions (read-only
+                # until write scopes land).
+                self.connection.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS mutation_intents (
+                        id INTEGER PRIMARY KEY,
+                        action TEXT NOT NULL,
+                        target TEXT NOT NULL DEFAULT '',
+                        description TEXT NOT NULL DEFAULT '',
+                        message_ids TEXT NOT NULL DEFAULT '[]',
+                        created_at TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'pending'
+                    );
+                    """
+                )
+                self.connection.execute("UPDATE schema_version SET version = 5")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -392,11 +413,26 @@ class Database:
         return result
 
     def get_message_body(self, message_id: str) -> str:
-        """Return the stored body for a message (empty string when unknown)."""
+        """Return the stored body for a message (empty string when unknown).
+
+        Bodies are cached with an LRU eviction policy sized by
+        *body_cache_size* so repeated reads in the TUI stay cheap without
+        holding every message body in memory.
+        """
+        cached = self._body_cache.get(message_id)
+        if cached is not None:
+            self._body_cache.move_to_end(message_id)
+            return cached
         row = self.connection.execute(
             "SELECT body FROM messages WHERE id = ?", (message_id,)
         ).fetchone()
-        return row[0] if row else ""
+        body = row[0] if row else ""
+        if self.body_cache_size > 0:
+            self._body_cache[message_id] = body
+            self._body_cache.move_to_end(message_id)
+            while len(self._body_cache) > self.body_cache_size:
+                self._body_cache.popitem(last=False)
+        return body
 
     def get_summary(self, message_id: str, fingerprint: str) -> str | None:
         """Get cached summary for a message if it exists."""
@@ -418,6 +454,57 @@ class Database:
                    summary = excluded.summary, model = excluded.model,
                    fingerprint = excluded.fingerprint, created_at = excluded.created_at""",
                 (message_id, summary, model, fingerprint, iso_now()),
+            )
+
+    def save_mutation_intent(
+        self,
+        action: str,
+        message_ids: list[str],
+        target: str = "",
+        description: str = "",
+    ) -> int:
+        """Record an accepted mutation suggestion as a pending intent."""
+        with self.transaction() as connection:
+            cursor = connection.execute(
+                """INSERT INTO mutation_intents(action, target, description, message_ids, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (action, target, description, json.dumps(message_ids), iso_now()),
+            )
+            lastrowid = cursor.lastrowid
+            assert lastrowid is not None
+            return lastrowid
+
+    def list_mutation_intents(self, status: str = "pending") -> list[dict]:
+        rows = self.connection.execute(
+            "SELECT * FROM mutation_intents WHERE status = ? ORDER BY id", (status,)
+        ).fetchall()
+        intents = [dict(row) for row in rows]
+        for intent in intents:
+            try:
+                intent["message_ids"] = json.loads(intent["message_ids"] or "[]")
+            except (ValueError, TypeError):
+                intent["message_ids"] = []
+        return intents
+
+    def clear_mutation_intents(self, ids: list[int] | None = None) -> None:
+        with self.transaction() as connection:
+            if ids:
+                placeholders = ",".join("?" for _ in ids)
+                connection.execute(
+                    f"DELETE FROM mutation_intents WHERE id IN ({placeholders})", ids
+                )
+            else:
+                connection.execute("DELETE FROM mutation_intents")
+
+    def record_action(
+        self, message_id: str, action: str, details: dict | None = None
+    ) -> None:
+        """Append an action-history entry (e.g. an applied batch suggestion)."""
+        with self.transaction() as connection:
+            connection.execute(
+                """INSERT INTO action_history(message_id, action, details, created_at)
+                   VALUES (?, ?, ?, ?)""",
+                (message_id, action, json_details(details or {}), iso_now()),
             )
 
     def close(self) -> None:

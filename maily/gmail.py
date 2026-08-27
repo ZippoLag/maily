@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import email.utils
 import json
+import random
 import re
 import time
 from datetime import UTC, datetime, timedelta
@@ -147,8 +148,9 @@ def _build_query(start: datetime, end: datetime, include_read: bool, spam: bool)
 def _execute_with_retry(request, max_retries: int = 5, base_delay: float = 1.0):
     """Execute a Gmail API request with exponential backoff on rate limits.
 
-    Retries 429 and quota/rate-limit 403 responses; other errors propagate
-    immediately so quota exhaustion stops gracefully with a clear failure.
+    Retries 429 and quota/rate-limit 403 responses with jitter; other errors
+    propagate immediately so quota exhaustion stops gracefully with a clear
+    failure.
     """
     delay = base_delay
     attempt = 0
@@ -157,12 +159,40 @@ def _execute_with_retry(request, max_retries: int = 5, base_delay: float = 1.0):
             return request.execute()
         except Exception as exc:
             status = getattr(getattr(exc, "resp", None), "status", None)
-            if status == 429 and attempt < max_retries:
-                time.sleep(delay)
+            reason = _error_reason(exc)
+            if (status == 429 or _is_quota_reason(reason)) and attempt < max_retries:
+                time.sleep(delay * (0.5 + random.random()))  # jittered backoff
                 delay *= 2
                 attempt += 1
                 continue
             raise
+
+
+def _error_reason(exc: Exception) -> str:
+    """Extract the Google API error reason from an exception if present."""
+    try:
+        details = exc.__dict__.get("details")
+        if isinstance(details, list) and details:
+            reason = details[0].get("reason", "")
+            if reason:
+                return reason
+    except (AttributeError, TypeError, KeyError):
+        pass
+    body = str(getattr(getattr(exc, "resp", None), "reason", "") or "").lower()
+    return body or str(exc)
+
+
+def _is_quota_reason(reason: str) -> bool:
+    lowered = reason.lower()
+    return any(
+        token in lowered
+        for token in (
+            "ratelimitexceeded",
+            "userratelimitexceeded",
+            "quotaexceeded",
+            "quota exceeded",
+        )
+    )
 
 
 def _header(headers: list[dict[str, str]], name: str) -> str:
@@ -202,8 +232,10 @@ def parse_message(raw: dict[str, Any], is_spam: bool) -> EmailMessage:
 
 
 class GoogleGmailClient:
-    def __init__(self, service):
+    def __init__(self, service, max_retries: int = 5):
         self.service = service
+        self.max_retries = max_retries
+        self.requests_made = 0
 
     def fetch_messages(
         self, start: datetime, end: datetime, include_read: bool = False
@@ -213,14 +245,16 @@ class GoogleGmailClient:
             query = _build_query(start, end, include_read, spam)
             request = self.service.users().messages().list(userId="me", q=query)
             while request is not None:
-                response = _execute_with_retry(request)
+                response = _execute_with_retry(request, max_retries=self.max_retries)
+                self.requests_made += 1
                 for item in response.get("messages", []):
                     raw_request = (
                         self.service.users()
                         .messages()
                         .get(userId="me", id=item["id"], format="full")
                     )
-                    raw = _execute_with_retry(raw_request)
+                    raw = _execute_with_retry(raw_request, max_retries=self.max_retries)
+                    self.requests_made += 1
                     messages.append(parse_message(raw, spam))
                 token = response.get("nextPageToken")
                 request = (

@@ -238,6 +238,7 @@ def test_run_scan_passes_historical_args_through(tmp_path, capsys, monkeypatch):
         chunk_size="day",
         progress_callback=None,
         batch_size=100,
+        **kwargs,
     ):
         captured["include_read"] = include_read
         captured["chunk_size"] = chunk_size
@@ -304,6 +305,7 @@ def test_run_scan_uses_config_scan_defaults(tmp_path, capsys, monkeypatch):
         chunk_size="day",
         progress_callback=None,
         batch_size=100,
+        **kwargs,
     ):
         captured["include_read"] = include_read
         captured["chunk_size"] = chunk_size
@@ -359,6 +361,7 @@ def test_run_scan_resumes_from_interrupted_state(tmp_path, capsys, monkeypatch):
         chunk_size="day",
         progress_callback=None,
         batch_size=100,
+        **kwargs,
     ):
         captured["start"] = start
         return SimpleNamespace(
@@ -407,6 +410,7 @@ def test_run_scan_does_not_resume_after_completed_scan(tmp_path, capsys, monkeyp
         chunk_size="day",
         progress_callback=None,
         batch_size=100,
+        **kwargs,
     ):
         captured["start"] = start
         return SimpleNamespace(
@@ -467,6 +471,7 @@ def test_run_scan_json_excludes_progress(tmp_path, capsys, monkeypatch):
         chunk_size="day",
         progress_callback=None,
         batch_size=100,
+        **kwargs,
     ):
         if progress_callback:
             progress_callback(
