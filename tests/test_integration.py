@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from maily.classifier import Classifier
 from maily.config import DEFAULT_CATEGORIES, load_config
@@ -13,14 +13,27 @@ class FakeGmail:
     def __init__(self, messages):
         self.messages = messages
 
+    def fetch_messages(self, start, end, include_read=False):
+        return self.messages
+
     def today_unread(self, start, end):
         return self.messages
 
 
-def make_message(message_id: str, subject: str, sender_email: str = "person@example.com") -> EmailMessage:
+def make_message(
+    message_id: str, subject: str, sender_email: str = "person@example.com"
+) -> EmailMessage:
     return EmailMessage(
-        message_id, message_id, "", sender_email, sender_email.split("@")[-1],
-        subject, "", datetime.now(timezone.utc), True, False,
+        message_id,
+        message_id,
+        "",
+        sender_email,
+        sender_email.split("@")[-1],
+        subject,
+        "",
+        datetime.now(UTC),
+        True,
+        False,
     )
 
 
@@ -55,7 +68,9 @@ def test_user_override_persists_across_scans(tmp_path):
     bounds = config.local_today_bounds()
     scan(FakeGmail([message]), database, Classifier(tuple(DEFAULT_CATEGORIES)), *bounds)
     save_category_overrides(database, ["m1"], ["Personal", "Work"])
-    second = scan(FakeGmail([message]), database, Classifier(tuple(DEFAULT_CATEGORIES)), *bounds)
+    second = scan(
+        FakeGmail([message]), database, Classifier(tuple(DEFAULT_CATEGORIES)), *bounds
+    )
     assert second.classifications["m1"].categories == ["Personal", "Work"]
     assert second.classifications["m1"].source == "override"
     rows = database.categorized_messages()
@@ -82,7 +97,11 @@ def test_rule_learning_suggests_pattern_from_corrections(tmp_path):
     database.connection.commit()
     save_category_overrides(database, ["m1", "m2", "m3"], ["Newsletters - technical"])
     suggestions = generate_suggestions(database)
-    matching = [s for s in suggestions if s["category"] == "Newsletters - technical" and s["pattern"] == "newsletter"]
+    matching = [
+        s
+        for s in suggestions
+        if s["category"] == "Newsletters - technical" and s["pattern"] == "newsletter"
+    ]
     assert matching and matching[0]["count"] == 3
     database.close()
 
@@ -104,7 +123,12 @@ def test_system_works_with_inference_disabled(tmp_path):
         make_message("m1", "Your verification code", "alerts@example.com"),
         make_message("m2", "Hello world"),
     ]
-    result = scan(FakeGmail(messages), database, Classifier(tuple(DEFAULT_CATEGORIES)), *config.local_today_bounds())
+    result = scan(
+        FakeGmail(messages),
+        database,
+        Classifier(tuple(DEFAULT_CATEGORIES)),
+        *config.local_today_bounds(),
+    )
     assert result.status in ("completed", "degraded")
     assert result.classifications["m1"].categories == ["Action Required"]
     assert result.classifications["m2"].categories == ["Other"]

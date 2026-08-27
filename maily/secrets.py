@@ -11,7 +11,9 @@ class CredentialStore:
         try:
             import keyring
         except ImportError as exc:
-            raise CredentialStoreError("Install maily with the 'secure' extra to enable OS credential storage") from exc
+            raise CredentialStoreError(
+                "Install maily with the 'secure' extra to enable OS credential storage"
+            ) from exc
         self._keyring = keyring
 
     def get(self, key: str) -> str | None:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "maily"
-version = "0.2.0"
+version = "0.3.0"
 description = "A local Gmail triage assistant"
 requires-python = ">=3.11"
 dependencies = []
@@ -16,7 +16,13 @@ gmail = [
 ]
 secure = ["keyring>=25.5.0"]
 tui = ["textual>=0.80.0"]
-dev = ["pytest>=8.3.0"]
+dev = [
+  "pytest>=8.3.0",
+  "pytest-cov>=5.0.0",
+  "ruff>=0.9.0",
+  "mypy>=1.14.0",
+  "textual>=0.80.0",
+]
 
 [project.scripts]
 maily = "maily.cli:main"
@@ -26,3 +32,21 @@ include = ["maily*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=maily --cov-branch --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 88
+
+[tool.mypy]
+files = ["maily"]
+python_version = "3.11"
+# Optional extras (gmail, secure) are not installed in the dev env; treat
+# their modules as Any rather than failing on missing imports.
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["maily"]
+
+[tool.coverage.report]
+show_missing = true

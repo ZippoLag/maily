@@ -1,9 +1,7 @@
 """Tests for OAuth file detection and maily fix command."""
 
-import sqlite3
-from pathlib import Path
-
 from dataclasses import replace
+from pathlib import Path
 
 from maily.cli import resolve_oauth_client_file, run_fix
 from maily.config import load_config

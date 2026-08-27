@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 import re
 import tomllib
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+
+SCAN_CHUNK_SIZES = ("day", "week", "month", "year")
 
 
 DEFAULT_CATEGORIES = [
@@ -49,7 +51,7 @@ class Rule:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Rule":
+    def from_dict(cls, data: dict[str, Any]) -> Rule:
         """Deserialize rule from dictionary."""
         return cls(
             category=data["category"],
@@ -118,6 +120,9 @@ class MailyConfig:
     categories: tuple[str, ...]
     inference_enabled: bool = False
     rules: tuple[Rule, ...] = DEFAULT_RULES
+    scan_date_range: str | None = None
+    scan_include_read: bool = False
+    scan_chunk_size: str = "day"
 
     @property
     def database_file(self) -> Path:
@@ -138,6 +143,26 @@ class MailyConfig:
 
 def default_home() -> Path:
     return Path(os.environ.get("MAILY_HOME", Path.home() / ".maily")).expanduser()
+
+
+def validate_scan_config(
+    date_range: str | None, include_read: bool, chunk_size: str
+) -> None:
+    """Validate the [scan] section, raising ValueError on invalid values."""
+    if date_range is not None:
+        try:
+            from .gmail import parse_date_range
+
+            parse_date_range(date_range)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid scan.date_range: {date_range!r} ({exc})"
+            ) from exc
+    if chunk_size not in SCAN_CHUNK_SIZES:
+        raise ValueError(
+            "Invalid scan.chunk_size: "
+            f"{chunk_size!r} (expected one of {', '.join(SCAN_CHUNK_SIZES)})"
+        )
 
 
 def _write_default_config(path: Path) -> None:
@@ -173,6 +198,12 @@ inference_enabled = false
 #   "weekend plans"
 # ]
 
+[scan]
+# Optional defaults for historical scans; CLI flags override these.
+# date_range = "last 30 days"   # "last 7 days", "this month", "2024-01-01:2024-01-31"
+# include_read = false          # set true to include already-read emails
+# chunk_size = "day"            # day | week | month | year
+
 [gmail]
 oauth_client_file = ""
 """
@@ -202,6 +233,12 @@ def load_config(home: Path | None = None) -> MailyConfig:
 
     user_rules = parse_rules(classification.get("rules"))
 
+    scan = raw.get("scan", {})
+    scan_date_range = scan.get("date_range")
+    scan_include_read = scan.get("include_read", False)
+    scan_chunk_size = scan.get("chunk_size", "day")
+    validate_scan_config(scan_date_range, scan_include_read, scan_chunk_size)
+
     return MailyConfig(
         home=state_home,
         timezone=timezone,
@@ -212,4 +249,7 @@ def load_config(home: Path | None = None) -> MailyConfig:
         categories=categories,
         inference_enabled=inference_enabled,
         rules=(*DEFAULT_RULES, *user_rules),
+        scan_date_range=scan_date_range,
+        scan_include_read=scan_include_read,
+        scan_chunk_size=scan_chunk_size,
     )

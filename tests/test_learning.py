@@ -16,7 +16,13 @@ def test_stop_words_include_common_english_words():
 
 
 def test_extract_words_splits_on_non_alphanumeric():
-    assert extract_words("Invoice-2024 #1: Payment due!") == ["invoice", "2024", "1", "payment", "due"]
+    assert extract_words("Invoice-2024 #1: Payment due!") == [
+        "invoice",
+        "2024",
+        "1",
+        "payment",
+        "due",
+    ]
 
 
 def test_extract_words_lowercases():
@@ -40,7 +46,11 @@ def test_generate_suggestions_only_at_threshold(tmp_path):
     config = load_config(tmp_path / ".maily")
     database = Database(config.database_file)
     database.seed_categories(tuple(DEFAULT_CATEGORIES))
-    for message_id, subject in (("m1", "Team meeting at noon"), ("m2", "Team sync invite"), ("m3", "Team retro")):
+    for message_id, subject in (
+        ("m1", "Team meeting at noon"),
+        ("m2", "Team sync invite"),
+        ("m3", "Team retro"),
+    ):
         database.connection.execute("INSERT INTO threads(id) VALUES (?)", (message_id,))
         database.connection.execute(
             "INSERT INTO messages(id, thread_id, subject, body, received_at, unread, is_spam, synced_at) "
@@ -67,7 +77,9 @@ def test_accept_suggestion_writes_rule_to_config(tmp_path):
     suggestion_id = database.get_rule_suggestions()[0]["id"]
     accept_suggestion(database, config.home / "config.toml", suggestion_id)
     reloaded = load_config(config.home)
-    assert any(rule.category == "Work" and "team" in rule.patterns for rule in reloaded.rules)
+    assert any(
+        rule.category == "Work" and "team" in rule.patterns for rule in reloaded.rules
+    )
     database.close()
 
 
@@ -79,8 +91,12 @@ def test_suggestion_status_tracking(tmp_path):
     suggestions = database.get_rule_suggestions()
     accept_suggestion(database, config.home / "config.toml", suggestions[0]["id"])
     reject_suggestion(database, suggestions[1]["id"])
-    assert [row["pattern"] for row in database.get_rule_suggestions(status="accepted")] == ["team"]
-    assert [row["pattern"] for row in database.get_rule_suggestions(status="rejected")] == ["invoice"]
+    assert [
+        row["pattern"] for row in database.get_rule_suggestions(status="accepted")
+    ] == ["team"]
+    assert [
+        row["pattern"] for row in database.get_rule_suggestions(status="rejected")
+    ] == ["invoice"]
     assert database.get_rule_suggestions(status="pending") == []
     database.close()
 

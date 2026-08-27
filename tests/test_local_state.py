@@ -35,6 +35,68 @@ def test_database_creates_user_category_overrides_table(tmp_path: Path):
     database.close()
 
 
+def test_database_creates_sync_state_table(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    table = database.connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sync_state'"
+    ).fetchone()
+    assert table is not None
+    columns = {
+        row[1] for row in database.connection.execute("PRAGMA table_info(sync_state)")
+    }
+    assert {
+        "account",
+        "last_sync_date",
+        "last_sync_email_id",
+        "total_processed",
+        "status",
+        "started_at",
+        "completed_at",
+        "chunk_size",
+    }.issubset(columns)
+    database.close()
+
+
+def test_sync_state_round_trip(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    assert database.get_sync_state() is None
+    database.save_sync_state(
+        status="running", started_at="2024-01-01T00:00:00", chunk_size="day"
+    )
+    state = database.get_sync_state()
+    assert state["status"] == "running"
+    assert state["chunk_size"] == "day"
+    assert state["total_processed"] == 0
+    # Partial update preserves the other fields.
+    database.save_sync_state(
+        total_processed=42, last_sync_date="2024-01-02T00:00:00+00:00"
+    )
+    state = database.get_sync_state()
+    assert state["total_processed"] == 42
+    assert state["last_sync_date"] == "2024-01-02T00:00:00+00:00"
+    assert state["status"] == "running"
+    database.save_sync_state(status="completed", completed_at="2024-01-02T00:01:00")
+    state = database.get_sync_state()
+    assert state["status"] == "completed"
+    assert state["total_processed"] == 42
+    database.reset_sync_state()
+    assert database.get_sync_state() is None
+    database.close()
+
+
+def test_sync_state_is_per_account(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    database.save_sync_state(account="a@example.com", status="running")
+    database.save_sync_state(account="b@example.com", status="completed")
+    assert database.get_sync_state("a@example.com")["status"] == "running"
+    assert database.get_sync_state("b@example.com")["status"] == "completed"
+    assert database.get_sync_state() is None  # default account untouched
+    database.reset_sync_state("a@example.com")
+    assert database.get_sync_state("a@example.com") is None
+    assert database.get_sync_state("b@example.com") is not None
+    database.close()
+
+
 def test_database_creates_learned_rule_suggestions_table(tmp_path: Path):
     database = Database(tmp_path / "maily.sqlite3")
     table = database.connection.execute(
@@ -121,6 +183,24 @@ def test_get_rule_suggestions_filters_by_status(tmp_path: Path):
     database.add_rule_suggestion("invoice", "Action Required", confidence=0.6)
     assert len(database.get_rule_suggestions(status="pending")) == 2
     assert database.get_rule_suggestions(status="accepted") == []
+    database.close()
+
+
+def test_categorized_messages_includes_body(tmp_path: Path):
+    database = Database(tmp_path / "maily.sqlite3")
+    database.seed_categories(tuple(DEFAULT_CATEGORIES))
+    database.connection.execute("INSERT INTO threads(id) VALUES ('m1')")
+    database.connection.execute(
+        "INSERT INTO messages(id, thread_id, subject, body, received_at, unread, is_spam, synced_at) "
+        "VALUES ('m1', 'm1', 'Hello', 'Real body text', '2026-08-26T10:00:00', 0, 0, '2026-08-26T10:00:00')"
+    )
+    database.connection.execute(
+        "INSERT INTO classifications(message_id, category, source, fingerprint, cached) "
+        "VALUES ('m1', 'Work', 'deterministic', 'fp', 0)"
+    )
+    database.connection.commit()
+    rows = database.categorized_messages()
+    assert rows[0]["body"] == "Real body text"
     database.close()
 
 
@@ -217,7 +297,7 @@ def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
         == 1
     )
     # New tables created
-    for table in ("user_category_overrides", "learned_rule_suggestions"):
+    for table in ("user_category_overrides", "learned_rule_suggestions", "sync_state"):
         row = database.connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
         ).fetchone()
@@ -256,7 +336,6 @@ oauth_client_file = ""
 def test_generate_summary_degrades_when_cache_fails(tmp_path: Path):
     """When the summary cache table is missing, _generate_summary returns preview."""
     import asyncio
-    from types import SimpleNamespace
 
     from maily.tui import BrowseApp
 

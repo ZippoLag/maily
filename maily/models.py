@@ -45,7 +45,7 @@ class ClassificationResult:
     cached: bool = False
     degraded: bool = False
     error: str | None = None
-    matched_rules: tuple["Rule", ...] = ()
+    matched_rules: tuple[Rule, ...] = ()
 
 
 @dataclass
@@ -62,18 +62,30 @@ class ScanResult:
     def as_dict(self) -> dict[str, Any]:
         categories: dict[str, list[dict[str, Any]]] = {}
         for message in self.messages:
-            result = self.classifications.get(message.id, ClassificationResult(["Other"], "fallback"))
+            result = self.classifications.get(
+                message.id, ClassificationResult(["Other"], "fallback")
+            )
             for category in result.categories:
                 categories.setdefault(category, []).append(message.as_dict())
-        counts = {category: len(categories.get(category, [])) for category in self.category_names}
-        counts.update({category: len(items) for category, items in categories.items() if category not in counts})
+        counts = {
+            category: len(categories.get(category, []))
+            for category in self.category_names
+        }
+        counts.update(
+            {
+                category: len(items)
+                for category, items in categories.items()
+                if category not in counts
+            }
+        )
         return {
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "status": self.status,
             "messages": [message.as_dict() for message in self.messages],
             "classifications": {
-                message_id: asdict(result) for message_id, result in self.classifications.items()
+                message_id: asdict(result)
+                for message_id, result in self.classifications.items()
             },
             "categories": categories,
             "counts": counts,

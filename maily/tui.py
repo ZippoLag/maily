@@ -1,20 +1,108 @@
 from __future__ import annotations
 
+import re
+from collections import Counter
+from datetime import UTC, datetime, timedelta
+from typing import ClassVar
+
 # Lazy Textual import: raises a friendly error when the 'tui' extra is
 # missing. Module-level so the app classes are importable for testing;
 # cli.py imports this module only inside the `tui` command branch.
 try:
     from textual.app import App, ComposeResult
+    from textual.binding import Binding
     from textual.containers import Vertical
     from textual.screen import ModalScreen
-    from textual.widgets import Checkbox, Footer, Header, Static, Tree
+    from textual.widgets import Checkbox, Footer, Header, ProgressBar, Static, Tree
 except ImportError as exc:
     raise RuntimeError("Install maily with the 'tui' extra to use the TUI") from exc
 
-from typing import ClassVar
-
 from .db import Database
 from .learning import accept_suggestion, reject_suggestion
+
+THEME_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "invoice",
+        re.compile(r"\binvoice\b|\bpayment\b|\bbill\b|\breceipt\b", re.IGNORECASE),
+    ),
+    ("newsletter", re.compile(r"\bunsubscribe\b|\bnewsletter\b", re.IGNORECASE)),
+    (
+        "meeting request",
+        re.compile(r"\bmeeting\b|\binvite\b|\bcalendar\b|\bschedule\b", re.IGNORECASE),
+    ),
+    (
+        "verification code",
+        re.compile(r"\bverification\b|\bcode\b|\bOTP\b|\b2FA\b", re.IGNORECASE),
+    ),
+    (
+        "job alert",
+        re.compile(
+            r"\bjob\b|\bhiring\b|\bvacancy\b|\brecruit\b|\bcareer\b", re.IGNORECASE
+        ),
+    ),
+)
+
+
+def count_themes(items: list[dict]) -> str:
+    """Count common themes across items, rendered as '3 invoices, 2 meetings'."""
+    counts: Counter[str] = Counter()
+    for item in items:
+        text = f"{item.get('subject', '')} {item.get('body', '')}"
+        for label, pattern in THEME_PATTERNS:
+            if pattern.search(text):
+                counts[label] += 1
+    if not counts:
+        return ""
+    return ", ".join(f"{n} {label}s" for label, n in counts.most_common())
+
+
+def generate_digest(items: list[dict], infer=None, model: str = "") -> tuple[str, str]:
+    """Build a digest of the given emails.
+
+    Returns ``(digest_text, source)`` where source is ``"inference"`` when an
+    inference callable produced the digest and ``"deterministic"`` otherwise.
+    """
+    count = len(items)
+    counts: dict[str, int] = {}
+    for item in items:
+        for category in item.get("categories") or [item.get("category")]:
+            counts[category] = counts.get(category, 0) + 1
+    breakdown = ", ".join(f"{n} {cat}" for cat, n in counts.items())
+    header = f"{count} email{'s' if count != 1 else ''}: {breakdown or 'no categories'}"
+    if infer is not None:
+        try:
+            listing = "\n".join(
+                f"- [{item.get('category', '')}] {item.get('sender_email', '')}: "
+                f"{item.get('subject', '')} - {item.get('body', '')[:200]}"
+                for item in items[:50]
+            )
+            prompt = (
+                "Summarize the key themes and action items across these emails "
+                f"({count} total, showing first {min(count, 50)}):\n{listing}"
+            )
+            return infer(prompt), "inference"
+        except Exception:  # noqa: BLE001, S110 - degrade to deterministic digest
+            pass
+    themes = count_themes(items)
+    themes_line = f"Themes: {themes}" if themes else "Themes: none detected"
+    return f"{header}\n{themes_line}", "deterministic"
+
+
+def date_group_label(received_at: str, now: datetime | None = None) -> str:
+    """Bucket an ISO received_at into a human date group (Today/Yesterday/Last Week/Month Year)."""
+    parsed = datetime.fromisoformat(received_at)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    current = now or datetime.now(UTC)
+    today = current.date()
+    day = parsed.date()
+    if day == today:
+        return "Today"
+    if day == today - timedelta(days=1):
+        return "Yesterday"
+    if day > today - timedelta(days=7):
+        return "Last Week"
+    return parsed.strftime("%B %Y")
 
 
 def grouped_rows(rows, categories, sort_field="last_received_at"):
@@ -98,7 +186,7 @@ def email_pane_text(item: dict, width: int = 80) -> str:
     wrapped_parts: list[str] = []
     for para in paragraphs:
         if para.strip() == "":
-            wrapped_parts.append("")  # preserve blank-line paragraph break
+            wrapped_parts.append("")
         else:
             wrapped_parts.append(textwrap.fill(para, width=width))
     wrapped_body = "\n".join(wrapped_parts)
@@ -119,6 +207,31 @@ class SummaryModal(ModalScreen):
             Static(self.summary_text, classes="modal-content"),
             Static("Press Escape to close", classes="modal-hint"),
         )
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+
+
+class DigestModal(ModalScreen):
+    """Modal screen showing a digest of the currently visible emails."""
+
+    def __init__(self, digest_text: str, cached: bool = False):
+        super().__init__()
+        self.digest_text = digest_text
+        self.cached = cached
+
+    def compose(self) -> ComposeResult:
+        title = "View Digest" + (" (cached)" if self.cached else "")
+        yield Vertical(
+            Static(title, classes="modal-title"),
+            Static(self.digest_text, classes="modal-content"),
+            Static("Press Escape to close", classes="modal-hint"),
+        )
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
 
 
 class SuggestionModal(ModalScreen):
@@ -172,8 +285,12 @@ class CategoryTree(Tree):
             self.tooltip = None
             return
         node = self._get_node(hover_line)
-        if node is not None and getattr(node, "data", None):
-            self.tooltip = f"Categories: {format_full_category_list(node.data)}"
+        if node is None:
+            self.tooltip = None
+            return
+        data = node.data
+        if data is not None:
+            self.tooltip = f"Categories: {format_full_category_list(data)}"
         else:
             self.tooltip = None
 
@@ -210,7 +327,7 @@ class CategoryEditModal(ModalScreen):
         selected = [
             self.category_by_id[checkbox.id]
             for checkbox in self.query(Checkbox)
-            if checkbox.value
+            if checkbox.value and checkbox.id is not None
         ]
         self.dismiss((self.message_ids, selected))
 
@@ -220,18 +337,23 @@ class CategoryEditModal(ModalScreen):
 
 
 class BrowseApp(App):
-    BINDINGS: ClassVar = [
+    BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("q", "quit", "Quit"),
         ("s", "sort", "Sort"),
         ("S", "summarize", "Summarize"),
         ("c", "edit_categories", "Edit categories"),
         ("m", "mark", "Mark/Unmark"),
         ("p", "suggestions", "Rule suggestions"),
+        ("d", "digest", "Digest view"),
+        ("pageup", "page_up", "Page Up"),
+        ("pagedown", "page_down", "Page Down"),
+        ("home", "home", "Home"),
+        ("end", "end", "End"),
     ]
 
     def __init__(self, config):
         super().__init__()
-        self._config = config
+        self.config = config
         self.sort_field = "last_received_at"
         self.sort_fields = [
             "first_received_at",
@@ -245,6 +367,8 @@ class BrowseApp(App):
         self.reading_pane = Static("Select an email to read.", id="reading-pane")
         self.selected_email = None
         self.selected_emails: list[dict] = []
+        self.email_count = 0
+        self._digest_cache: dict[tuple, str] = {}
 
     def on_mount(self) -> None:
         self.rebuild()
@@ -253,15 +377,44 @@ class BrowseApp(App):
         tree = self.query_one(Tree)
         tree.clear()
         rows = self.database.categorized_messages()
-        grouped = grouped_rows(rows, self._config.categories, self.sort_field)
-        for category, items in grouped.items():
+        grouped = grouped_rows(rows, self.config.categories, self.sort_field)
+        total_emails = sum(len(items) for items in grouped.values())
+        self.email_count = total_emails
+        tree.root.label = f"{total_emails} emails"
+        self.status.update(f"Read-only browsing | {total_emails} emails")
+        progress = self.query_one("#load-progress", ProgressBar)
+        progress.display = True
+        progress.total = len(grouped)
+        progress.progress = 0
+        for index, (category, items) in enumerate(grouped.items()):
             category_node = tree.root.add(f"{category} ({len(items)})")
+            buckets: dict[str, list[dict]] = {}
             for item in items:
-                self._add_email_node(category_node, item)
+                buckets.setdefault(date_group_label(item["received_at"]), []).append(
+                    item
+                )
+            for bucket, bucket_items in buckets.items():
+                bucket_node = category_node.add(f"{bucket} ({len(bucket_items)})")
+                for item in bucket_items:
+                    self._add_email_node(bucket_node, item)
+            progress.progress = index + 1
         tree.root.expand()
+        self._expand_group_nodes(tree.root)
+        progress.display = False
+
+    def _expand_group_nodes(self, node) -> None:
+        """Expand category and date-bucket nodes so emails are visible.
+
+        Email nodes (which carry item data) stay collapsed: their sender and
+        body details load lazily when the user expands them.
+        """
+        for child in node.children:
+            if child.data is None:
+                child.expand()
+                self._expand_group_nodes(child)
 
     def _add_email_node(self, parent_node, item):
-        """Add an email node that can be expanded to show sender and body."""
+        """Add an email node; sender/body details load lazily on first expand."""
         from .models import primary_category
 
         subject = item.get("subject") or "(no subject)"
@@ -283,8 +436,19 @@ class BrowseApp(App):
             f"{mark_prefix}{primary_prefix}{sender_label}: {subject}{badge_suffix}",
             data=dict(item),
         )
+        email_node.allow_expand = True
 
-        email_node.allow_expand = False
+    def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
+        """Lazily load sender/body details for an email node on first expand."""
+        node = event.node
+        if not node.data or node.children:
+            return
+        item = node.data
+        body = self.database.get_message_body(item["id"])
+        sender_name = item.get("sender_name") or "(unknown)"
+        sender_email = item.get("sender_email") or ""
+        node.add(f"[dim]From: {sender_name} <{sender_email}>[/dim]")
+        node.add(f"{(body or '(no body)').replace(chr(10), ' ')[:1000]}")
 
     def action_sort(self) -> None:
         self.sort_field = self.sort_fields[
@@ -318,7 +482,7 @@ class BrowseApp(App):
             cached = self.database.get_summary(message_id, str(fingerprint))
             if cached:
                 return cached
-        except Exception:  # noqa: BLE001 - degrade on cache failure
+        except Exception:  # noqa: BLE001, S110 - degrade on cache failure
             pass
 
         summary_prompt = f"""Summarize this email in 2-3 sentences. Focus on action items, key information, and sender intent.
@@ -334,20 +498,20 @@ Summary:"""
             from .ollama import OllamaProvider
 
             provider = OllamaProvider(
-                self._config.ollama_url,
-                self._config.ollama_model,
-                self._config.ollama_timeout_seconds,
+                self.config.ollama_url,
+                self.config.ollama_model,
+                self.config.ollama_timeout_seconds,
             )
-            if self._config.inference_enabled:
+            if self.config.inference_enabled:
                 summary = provider.generate(summary_prompt)
                 try:
                     self.database.store_summary(
-                        message_id, summary, self._config.ollama_model, str(fingerprint)
+                        message_id, summary, self.config.ollama_model, str(fingerprint)
                     )
-                except Exception:  # noqa: BLE001 - degrade on cache failure
+                except Exception:  # noqa: BLE001, S110 - degrade on cache failure
                     pass
                 return summary
-        except (ImportError, Exception):
+        except Exception:  # noqa: BLE001, S110 - degraded fallback when inference is unavailable
             pass
 
         if len(body) <= 200:
@@ -357,14 +521,9 @@ Summary:"""
 
         try:
             self.database.store_summary(message_id, summary, "", str(fingerprint))
-        except Exception:  # noqa: BLE001 - degrade on cache failure
+        except Exception:  # noqa: BLE001, S110 - degrade on cache failure
             pass
         return summary
-
-    def _update_reading_pane(self, item: dict) -> None:
-        """Populate the reading pane with the selected email's content."""
-        width = self.reading_pane.size.width or 80
-        self.reading_pane.update(email_pane_text(item, width=width))
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         if event.node.data:
@@ -379,6 +538,11 @@ Summary:"""
             self.selected_email = None
             self.selected_emails = []
             self.reading_pane.update("Select an email to read.")
+
+    def _update_reading_pane(self, item: dict) -> None:
+        """Populate the reading pane with the selected email's content."""
+        width = self.reading_pane.size.width or 80
+        self.reading_pane.update(email_pane_text(item, width=width))
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
         """Update focused email when the user navigates the tree."""
@@ -400,12 +564,64 @@ Summary:"""
             self.selected_email = None
             self.reading_pane.update("Select an email to read.")
 
+    def _visible_email_nodes(self, tree):
+        """Return the email rows currently visible in the tree viewport."""
+        start = max(0, tree.scroll_offset.y)
+        end = start + tree.size.height
+        nodes = []
+        for line in range(start, end):
+            node = tree._get_node(line)
+            if node is not None and node.data is not None:
+                nodes.append(node.data)
+        return nodes
+
+    def action_digest(self) -> None:
+        """Generate and display a digest of the currently visible emails."""
+        tree = self.query_one(Tree)
+        nodes = self._visible_email_nodes(tree)
+        if not nodes:
+            self.status.update("No emails visible to digest")
+            return
+        view_key = (self.sort_field, tuple(sorted(node["id"] for node in nodes)))
+        cached_text = self._digest_cache.get(view_key)
+        if cached_text is not None:
+            self.push_screen(DigestModal(cached_text, cached=True))
+            return
+        infer = None
+        if self.config.inference_enabled:
+            try:
+                from .ollama import OllamaProvider
+
+                provider = OllamaProvider(
+                    self.config.ollama_url,
+                    self.config.ollama_model,
+                    self.config.ollama_timeout_seconds,
+                )
+                infer = provider.generate
+            except Exception:  # noqa: BLE001, S110 - degraded fallback when inference is unavailable
+                pass
+        text, _ = generate_digest(nodes, infer=infer, model=self.config.ollama_model)
+        self._digest_cache[view_key] = text
+        self.push_screen(DigestModal(text))
+
+    def action_page_up(self) -> None:
+        self.query_one(Tree).scroll_page_up(animate=False)
+
+    def action_page_down(self) -> None:
+        self.query_one(Tree).scroll_page_down(animate=False)
+
+    def action_home(self) -> None:
+        self.query_one(Tree).scroll_home(animate=False)
+
+    def action_end(self) -> None:
+        self.query_one(Tree).scroll_end(animate=False)
+
     def action_suggestions(self) -> None:
         """Open the rule suggestion review modal."""
         suggestions = self.database.get_rule_suggestions(status="pending")
         self.push_screen(
             SuggestionModal(
-                suggestions, self._config.home / "config.toml", self.database
+                suggestions, self.config.home / "config.toml", self.database
             )
         )
 
@@ -443,7 +659,7 @@ Summary:"""
         self._edit_initial = initial
         message_ids = [item["id"] for item in self.selected_emails]
         self.push_screen(
-            CategoryEditModal(list(self._config.categories), initial, message_ids),
+            CategoryEditModal(list(self.config.categories), initial, message_ids),
             self._on_categories_saved,
         )
 
@@ -469,10 +685,14 @@ Summary:"""
 
     def compose(self) -> ComposeResult:
         yield Header()
-        root = CategoryTree("Today's unread mail")
+        root = CategoryTree("Today's unread mail", id="tree")
         yield root
         yield self.reading_pane
         yield self.status
+        yield ProgressBar(id="load-progress", show_eta=False, show_percentage=True)
+        yield Static(
+            "Read-only browsing. Run maily scan to refresh data. 'd' digests the visible emails."
+        )
         yield Footer()
 
 

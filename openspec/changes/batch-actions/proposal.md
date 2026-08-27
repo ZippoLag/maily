@@ -4,6 +4,8 @@ Users need to perform actions on multiple emails at once, particularly for large
 
 This addresses the need to efficiently process large email volumes (5000+ unread) where individual actions would be impractical.
 
+**Prerequisite:** `keyboard-only-tui` — establishes implicit selection of the focused email and keyboard-driven action flow. This change builds on that foundation by adding explicit multi-select (Space toggle), batch operations, and AI-assisted suggestions.
+
 ## What Changes
 
 - **New**: Multi-select in TUI (select multiple emails via keyboard or mouse)

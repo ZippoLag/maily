@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
-
 
 SCHEMA_VERSION = 3
 
@@ -126,6 +125,16 @@ class Database:
             with self.connection:
                 self.connection.executescript(
                     """
+                    CREATE TABLE IF NOT EXISTS sync_state (
+                        account TEXT PRIMARY KEY,
+                        last_sync_date TEXT,
+                        last_sync_email_id TEXT,
+                        total_processed INTEGER NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'idle',
+                        started_at TEXT,
+                        completed_at TEXT,
+                        chunk_size TEXT NOT NULL DEFAULT 'day'
+                    );
                     CREATE TABLE IF NOT EXISTS email_summaries (
                         message_id TEXT PRIMARY KEY,
                         summary TEXT NOT NULL,
@@ -265,6 +274,56 @@ class Database:
                         (message.id, category, source, message_fingerprint, cached),
                     )
 
+    def get_sync_state(self, account: str = "default") -> dict | None:
+        """Return the sync state row for an account, or None if never tracked."""
+        row = self.connection.execute(
+            "SELECT * FROM sync_state WHERE account = ?", (account,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def save_sync_state(
+        self,
+        account: str = "default",
+        *,
+        last_sync_date: str | None = None,
+        last_sync_email_id: str | None = None,
+        total_processed: int | None = None,
+        status: str | None = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
+        chunk_size: str | None = None,
+    ) -> None:
+        """Upsert sync state for an account, updating only the provided fields."""
+        fields = {
+            name: value
+            for name, value in {
+                "last_sync_date": last_sync_date,
+                "last_sync_email_id": last_sync_email_id,
+                "total_processed": total_processed,
+                "status": status,
+                "started_at": started_at,
+                "completed_at": completed_at,
+                "chunk_size": chunk_size,
+            }.items()
+            if value is not None
+        }
+        if not fields:
+            return
+        columns = ", ".join(fields)
+        placeholders = ", ".join("?" for _ in fields)
+        updates = ", ".join(f"{name} = excluded.{name}" for name in fields)
+        with self.transaction() as connection:
+            connection.execute(
+                f"INSERT INTO sync_state(account, {columns}) VALUES (?, {placeholders}) "
+                f"ON CONFLICT(account) DO UPDATE SET {updates}",
+                [account, *fields.values()],
+            )
+
+    def reset_sync_state(self, account: str = "default") -> None:
+        """Delete all sync state for an account so the next scan starts fresh."""
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM sync_state WHERE account = ?", (account,))
+
     def last_completed_sync(self):
         return self.connection.execute(
             "SELECT * FROM sync_runs WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
@@ -294,7 +353,7 @@ class Database:
     def categorized_messages(self):
         rows = self.connection.execute(
             """SELECT m.id, m.subject, m.sender_name, m.sender_email, m.sender_domain,
-                    m.received_at, m.importance, t.first_received_at, t.last_received_at, c.category
+                    m.body, m.received_at, m.importance, t.first_received_at, t.last_received_at, c.category
                     FROM messages m JOIN threads t ON t.id = m.thread_id
                     JOIN classifications c ON c.message_id = m.id
                ORDER BY m.received_at DESC"""
@@ -316,6 +375,13 @@ class Database:
                 row["categories"] = categories
                 result.append(row)
         return result
+
+    def get_message_body(self, message_id: str) -> str:
+        """Return the stored body for a message (empty string when unknown)."""
+        row = self.connection.execute(
+            "SELECT body FROM messages WHERE id = ?", (message_id,)
+        ).fetchone()
+        return row[0] if row else ""
 
     def get_summary(self, message_id: str, fingerprint: str) -> str | None:
         """Get cached summary for a message if it exists."""
