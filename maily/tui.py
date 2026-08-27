@@ -194,6 +194,28 @@ def email_pane_text(item: dict, width: int = 80) -> str:
     return f"{header}\n\n{wrapped_body}"
 
 
+_LABEL_COLORS = ("red", "green", "blue", "magenta", "cyan", "yellow")
+
+
+def format_label_badges(labels, max_badges: int = 2) -> str:
+    """Render user labels as colored inline badges, truncating with '+N more'.
+
+    Labels are styled with a deterministic color per label so badges stay
+    distinguishable at a glance.
+    """
+    labels = list(labels or ())
+    if not labels:
+        return ""
+    shown = labels[:max_badges]
+    parts = []
+    for label in shown:
+        color = _LABEL_COLORS[hash(label) % len(_LABEL_COLORS)]
+        parts.append(f"[{color}]{label}[/]")
+    if len(labels) > max_badges:
+        parts.append(f"[dim]+{len(labels) - max_badges} more[/]")
+    return " " + " ".join(parts)
+
+
 class SummaryModal(ModalScreen):
     """Modal screen to display email summary."""
 
@@ -305,9 +327,17 @@ class CategoryEditModal(ModalScreen):
         self.categories = categories
         self.initial = initial
         self.message_ids = message_ids
+        self.confirming = False
         self.category_by_id = {
             f"cat-{i}": category for i, category in enumerate(categories)
         }
+
+    def _collected(self) -> list[str]:
+        return [
+            self.category_by_id[checkbox.id]
+            for checkbox in self.query(Checkbox)
+            if checkbox.value and checkbox.id is not None
+        ]
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -318,22 +348,90 @@ class CategoryEditModal(ModalScreen):
             ],
             Static(
                 f"Editing {len(self.message_ids)} email(s). Press 's' to save, Escape to cancel.",
+                id="edit-hint",
                 classes="modal-hint",
             ),
         )
 
     def action_save(self) -> None:
-        """Collect checked categories and dismiss with the result."""
-        selected = [
-            self.category_by_id[checkbox.id]
-            for checkbox in self.query(Checkbox)
-            if checkbox.value and checkbox.id is not None
-        ]
+        """Collect checked categories; confirm before applying to multiple emails."""
+        selected = self._collected()
+        if len(self.message_ids) > 1 and not self.confirming:
+            self.confirming = True
+            hint = self.query_one("#edit-hint", Static)
+            hint.update(
+                f"Apply to {len(self.message_ids)} emails? Press 'y' to confirm, 'n' to cancel."
+            )
+            return
         self.dismiss((self.message_ids, selected))
 
     def on_key(self, event) -> None:
         if event.key == "escape":
             self.dismiss(None)
+            return
+        if self.confirming:
+            if event.key == "y":
+                self.dismiss((self.message_ids, self._collected()))
+            elif event.key == "n":
+                self.dismiss(None)
+
+
+class BatchSuggestionsModal(ModalScreen):
+    """Modal listing batch action suggestions for the current selection."""
+
+    def __init__(self, suggestions, selected_emails, app):
+        super().__init__()
+        self.suggestions = suggestions
+        self.selected_emails = selected_emails
+        self.app = app
+
+    def compose(self) -> ComposeResult:
+        lines = [
+            Static("Batch Action Suggestions", classes="modal-title"),
+            Static(
+                f"{len(self.selected_emails)} email(s) selected.",
+                classes="modal-hint",
+            ),
+        ]
+        if not self.suggestions:
+            lines.append(Static("No suggestions for this selection."))
+        for index, suggestion in enumerate(self.suggestions):
+            label = suggestion.description
+            if suggestion.requires_write:
+                label += "  (read-only: needs Gmail write access)"
+            lines.append(
+                Static(
+                    f"{index + 1}. {label} — confidence {suggestion.confidence:.0%}",
+                    classes="modal-content",
+                )
+            )
+        lines.append(
+            Static(
+                "Press a number to apply a categorize suggestion; Escape to close.",
+                classes="modal-hint",
+            )
+        )
+        yield Vertical(*lines)
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+            return
+        if event.key.isdigit() and event.key != "0":
+            index = int(event.key) - 1
+            if 0 <= index < len(self.suggestions):
+                suggestion = self.suggestions[index]
+                if suggestion.requires_write:
+                    self.app.notify(
+                        f"{suggestion.action} needs Gmail write access (read-only)",
+                        title="Batch",
+                    )
+                    return
+                if suggestion.action == "categorize" and suggestion.category:
+                    self.dismiss((suggestion, list(suggestion.email_ids)))
+
+    def on_mount(self) -> None:
+        self.focus()
 
 
 class BrowseApp(App):
@@ -345,6 +443,12 @@ class BrowseApp(App):
         ("m", "mark", "Mark/Unmark"),
         ("p", "suggestions", "Rule suggestions"),
         ("d", "digest", "Digest view"),
+        ("space", "toggle_select", "Select/Unselect"),
+        ("ctrl+a", "select_all_visible", "Select all visible"),
+        ("ctrl+d", "deselect_all", "Deselect all"),
+        ("escape", "clear_selection", "Clear selection"),
+        ("l", "filter_by_label", "Filter by label"),
+        ("b", "batch_suggestions", "Batch suggestions"),
         ("pageup", "page_up", "Page Up"),
         ("pagedown", "page_down", "Page Down"),
         ("home", "home", "Home"),
@@ -368,7 +472,9 @@ class BrowseApp(App):
         self.selected_email = None
         self.selected_emails: list[dict] = []
         self.email_count = 0
+        self._label_filter: str | None = None
         self._digest_cache: dict[tuple, str] = {}
+        self._suggestion_cache: dict[tuple, list] = {}
 
     def on_mount(self) -> None:
         self.rebuild()
@@ -377,6 +483,10 @@ class BrowseApp(App):
         tree = self.query_one(Tree)
         tree.clear()
         rows = self.database.categorized_messages()
+        if self._label_filter:
+            rows = [
+                row for row in rows if self._label_filter in (row.get("labels") or ())
+            ]
         grouped = grouped_rows(rows, self.config.categories, self.sort_field)
         total_emails = sum(len(items) for items in grouped.values())
         self.email_count = total_emails
@@ -432,8 +542,9 @@ class BrowseApp(App):
         primary_prefix = f"[{primary}] " if primary else ""
         is_marked = item in self.selected_emails
         mark_prefix = "[X] " if is_marked else "[ ] "
+        label_badges = format_label_badges(item.get("labels"))
         email_node = parent_node.add(
-            f"{mark_prefix}{primary_prefix}{sender_label}: {subject}{badge_suffix}",
+            f"{mark_prefix}{primary_prefix}{sender_label}: {subject}{badge_suffix}{label_badges}",
             data=dict(item),
         )
         email_node.allow_expand = True
@@ -615,6 +726,122 @@ Summary:"""
 
     def action_end(self) -> None:
         self.query_one(Tree).scroll_end(animate=False)
+
+    def action_toggle_select(self) -> None:
+        """Toggle the focused email in the multi-select set (Space)."""
+        if not self.selected_email:
+            self.status.update("Select an email first to toggle")
+            return
+        item = self.selected_email
+        if item in self.selected_emails:
+            self.selected_emails.remove(item)
+            self.status.update(
+                f"Deselected {item.get('subject')} ({len(self.selected_emails)} selected)"
+            )
+        else:
+            self.selected_emails.append(item)
+            self.status.update(
+                f"Selected {item.get('subject')} ({len(self.selected_emails)} selected)"
+            )
+        self.rebuild()
+
+    def action_select_all_visible(self) -> None:
+        """Select every email currently visible in the tree viewport (Ctrl+A)."""
+        tree = self.query_one(Tree)
+        nodes = self._visible_email_nodes(tree)
+        if not nodes:
+            self.status.update("No emails visible to select")
+            return
+        before = len(self.selected_emails)
+        for node in nodes:
+            if node not in self.selected_emails:
+                self.selected_emails.append(node)
+        self.status.update(
+            f"Selected {len(self.selected_emails)} emails (was {before})"
+        )
+        self.rebuild()
+
+    def action_deselect_all(self) -> None:
+        """Clear the multi-select set (Ctrl+D / Escape)."""
+        self.selected_emails = []
+        self.status.update("Cleared selection")
+        self.rebuild()
+
+    def action_clear_selection(self) -> None:
+        """Escape clears the multi-select set when no modal is open."""
+        self.action_deselect_all()
+
+    def action_filter_by_label(self) -> None:
+        """Toggle a label filter based on the focused email (press again to clear)."""
+        if self._label_filter:
+            self._label_filter = None
+            self.status.update("Label filter cleared")
+            self.rebuild()
+            return
+        if not self.selected_email:
+            self.status.update("Select an email first to filter by label")
+            return
+        labels = list(self.selected_email.get("labels") or ())
+        if not labels:
+            self.status.update("Focused email has no user labels to filter by")
+            return
+        self._label_filter = labels[0]
+        self.status.update(f"Filtered by label: {self._label_filter}")
+        self.rebuild()
+
+    def action_batch_suggestions(self) -> None:
+        """Open batch action suggestions for the current selection ('b')."""
+        if not self.selected_emails:
+            self.status.update("Select emails first (Space, Ctrl+A) for suggestions")
+            return
+        from .suggestions import cache_key, generate_suggestions
+
+        key = cache_key(self.selected_emails)
+        suggestions = self._suggestion_cache.get(key)
+        if suggestions is None:
+            infer = None
+            if self.config.inference_enabled:
+                try:
+                    from .ollama import OllamaProvider
+
+                    provider = OllamaProvider(
+                        self.config.ollama_url,
+                        self.config.ollama_model,
+                        self.config.ollama_timeout_seconds,
+                    )
+                    infer = provider.generate
+                except Exception:  # noqa: BLE001, S110 - fall back to deterministic
+                    pass
+            suggestions = generate_suggestions(list(self.selected_emails), infer=infer)
+            self._suggestion_cache[key] = suggestions
+        self.push_screen(
+            BatchSuggestionsModal(suggestions, self.selected_emails, self),
+            self._on_batch_suggestion,
+        )
+
+    def _on_batch_suggestion(self, result) -> None:
+        """Apply an accepted categorize suggestion."""
+        if result is None:
+            return  # cancelled
+        suggestion, message_ids = result
+        if suggestion.action == "categorize":
+            self._apply_batch_categorization(suggestion, message_ids)
+
+    def _apply_batch_categorization(self, suggestion, message_ids: list[str]) -> None:
+        """Apply a categorize suggestion to the target emails, reporting failures."""
+        failures: list[str] = []
+        try:
+            save_category_overrides(self.database, message_ids, [suggestion.category])
+        except Exception as exc:  # noqa: BLE001 - surface partial failure
+            failures.append(str(exc))
+        self.rebuild()
+        if failures:
+            self.notify(f"Categorized with {len(failures)} failure(s)", title="Batch")
+        else:
+            self.notify(
+                f"Categorized {len(message_ids)} email(s) as {suggestion.category}",
+                title="Batch",
+            )
 
     def action_suggestions(self) -> None:
         """Open the rule suggestion review modal."""

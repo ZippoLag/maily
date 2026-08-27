@@ -175,6 +175,15 @@ Select an email and press **S** (Shift+s) to generate a summary. Summaries are:
 
 Summaries are displayed in a modal window. Press **Escape** to close the modal.
 
+### Multi-Select
+
+Select multiple emails to act on them together:
+- **Space** toggles the focused email in the selection set
+- **Ctrl+A** selects every email visible in the current viewport
+- **Ctrl+D** (or **Escape** with no modal open) clears the selection
+- Selected emails show a `[X]` checkbox prefix; the status bar shows the running count
+- Selection survives scrolling and re-sorting
+
 ### Category Editing
 
 Select an email and press **c** to open the category editor:
@@ -183,9 +192,19 @@ Select an email and press **c** to open the category editor:
 - **s** saves the change and persists it in the local database
 - **Escape** cancels without saving
 
-Mark multiple emails with **m** before pressing **c** to apply the same category change to all marked emails at once.
+When multiple emails are selected, **c** applies the same category change to all of them at once, and asks you to confirm with **y** before saving. Each email shows its primary category with secondary categories as badges. The full category list is always visible in the status bar for the selected email.
 
-Each email shows its primary category with secondary categories as badges. The full category list is always visible in the status bar for the selected email.
+### Gmail Label Badges
+
+User-created Gmail labels render as colored badges next to each email in the tree (system labels like INBOX and SPAM are hidden). Long label lists are truncated with a `+N more` indicator. Press **l** to filter the view by the focused email's label; press **l** again to clear the filter.
+
+### Batch Action Suggestions
+
+Select several emails and press **b** to get batch action suggestions. Suggestions are generated deterministically from the selection (shared senders, labels, and newsletter patterns) and, when local inference is enabled, augmented with an AI-identified pattern. Each suggestion carries a confidence score:
+- **Categorize** suggestions apply locally when accepted (press the suggestion number)
+- **Archive / mark-read / delete** suggestions are read-only for now — they note that applying them needs Gmail write access in a future mutation workflow
+
+Suggestions for the same selection are cached and reused.
 
 ### Rule Learning
 
@@ -214,10 +233,15 @@ Press **d** to summarize the emails currently visible in the tree: a count, a br
 | `m` | Mark/unmark selected email for batch editing |
 | `p` | Review pending rule suggestions |
 | `d` | Digest the currently visible emails |
+| `Space` | Select/unselect focused email |
+| `Ctrl+A` | Select all visible emails |
+| `Ctrl+D` | Deselect all |
+| `l` | Filter by focused email's label |
+| `b` | Batch action suggestions |
 | `Page Up` / `Page Down` | Scroll by one page |
 | `Home` / `End` | Jump to the first / last email |
 | `Enter` | Expand/collapse email |
-| `Escape` | Close modal |
+| `Escape` | Close modal / clear selection |
 
 
 

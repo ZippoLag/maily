@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class Database:
@@ -146,6 +146,13 @@ class Database:
                     """
                 )
                 self.connection.execute("UPDATE schema_version SET version = 3")
+        if current < 4:
+            with self.connection:
+                # User-created Gmail labels rendered as badges in the TUI.
+                self.connection.execute(
+                    "ALTER TABLE messages ADD COLUMN labels TEXT NOT NULL DEFAULT ''"
+                )
+                self.connection.execute("UPDATE schema_version SET version = 4")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -239,11 +246,13 @@ class Database:
                 )
                 connection.execute(
                     """INSERT INTO messages(id, thread_id, sender_name, sender_email, sender_domain, subject, body,
-                       received_at, unread, is_spam, importance, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       received_at, unread, is_spam, importance, labels, synced_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                        ON CONFLICT(id) DO UPDATE SET thread_id=excluded.thread_id, sender_name=excluded.sender_name,
                        sender_email=excluded.sender_email, sender_domain=excluded.sender_domain, subject=excluded.subject,
                        body=excluded.body, received_at=excluded.received_at, unread=excluded.unread,
-                       is_spam=excluded.is_spam, importance=excluded.importance, synced_at=excluded.synced_at""",
+                       is_spam=excluded.is_spam, importance=excluded.importance, labels=excluded.labels,
+                       synced_at=excluded.synced_at""",
                     (
                         message.id,
                         message.thread_id,
@@ -256,6 +265,7 @@ class Database:
                         message.unread,
                         message.is_spam,
                         message.importance,
+                        json.dumps(list(getattr(message, "labels", ()))),
                         iso_now(),
                     ),
                 )
@@ -353,14 +363,19 @@ class Database:
     def categorized_messages(self):
         rows = self.connection.execute(
             """SELECT m.id, m.subject, m.sender_name, m.sender_email, m.sender_domain,
-                    m.body, m.received_at, m.importance, t.first_received_at, t.last_received_at, c.category
+                    m.body, m.received_at, m.importance, m.labels, t.first_received_at, t.last_received_at, c.category
                     FROM messages m JOIN threads t ON t.id = m.thread_id
                     JOIN classifications c ON c.message_id = m.id
                ORDER BY m.received_at DESC"""
         ).fetchall()
         by_message: dict[str, list[dict]] = {}
         for row in rows:
-            by_message.setdefault(row["id"], []).append(dict(row))
+            item = dict(row)
+            try:
+                item["labels"] = tuple(json.loads(item["labels"] or "[]"))
+            except (ValueError, TypeError):
+                item["labels"] = ()
+            by_message.setdefault(item["id"], []).append(item)
         result: list[dict] = []
         for message_id, message_rows in by_message.items():
             override = self.get_user_override(message_id)
