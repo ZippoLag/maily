@@ -277,11 +277,14 @@ class BrowseApp(App):
             else ""
         )
         primary_prefix = f"[{primary}] " if primary else ""
+        is_marked = item in self.selected_emails
+        mark_prefix = "[X] " if is_marked else "[ ] "
         email_node = parent_node.add(
-            f"{primary_prefix}{sender_label}: {subject}{badge_suffix}", data=dict(item)
+            f"{mark_prefix}{primary_prefix}{sender_label}: {subject}{badge_suffix}",
+            data=dict(item),
         )
 
-        email_node.allow_expand = True
+        email_node.allow_expand = False
 
     def action_sort(self) -> None:
         self.sort_field = self.sort_fields[
@@ -422,6 +425,7 @@ Summary:"""
             self.status.update(
                 f"Marked {item.get('subject')} ({len(self.selected_emails)} selected)"
             )
+        self.rebuild()
 
     def action_edit_categories(self) -> None:
         """Open the category edit modal for the selected email(s)."""
