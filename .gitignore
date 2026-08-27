@@ -1,49 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.coverage
+htmlcov/
+*.egg-info/
+*.egg/
+dist/
+build/
 
-# openlore analysis artifacts
+# Python tool caches
+.ruff_cache/
+.mypy_cache/
+
+# Test / coverage artifacts
+.pytest_cache/
+
+# Node
+node_modules/
+.npm/
+
+# pnpm
+.pnpm-store/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
 .openlore/
-.pnpm-store/v11/index.db
-.pnpm-store/v11/files/60/de10c3f07f95a40da506794aa2cc21bb0f66ae2a0896be9e72d95a9b184307b73868a16caad9d35ac42e32a463cdfa7201ce4d1dd0dfc22cce4788fda67169
-.pnpm-store/v11/files/b1/33fbaec24c8a4518c9e4ed6957a6d5ec6bbb010c38099825837753557527fa783cea9861789ced03301692ec418efe8e5a41beaad8a257756c7ff774be22d8
-.pnpm-store/v11/files/d7/3cf20af261191493c289384d886cdb5fd86fad6bcb4b6caf8e4b8b5332d4bcbd522244c0b950592f26b44eccf250d0ccb21dd2968b5abe33f41608386c0297
-node_modules/.modules.yaml
-node_modules/.package-map.json
-node_modules/.pnpm-workspace-state-v1.json
-node_modules/openspec
-node_modules/.pnpm/lock.yaml
-node_modules/.pnpm/openspec@0.0.0/node_modules/openspec/LICENSE
-node_modules/.pnpm/openspec@0.0.0/node_modules/openspec/package.json
-node_modules/.pnpm/openspec@0.0.0/node_modules/openspec/README.md
-pnpm-lock.yaml
-package.json
 *.apps.googleusercontent.com.json
-maily/__pycache__/__init__.cpython-314.pyc
-maily/__pycache__/__main__.cpython-314.pyc
-maily/__pycache__/auth.cpython-314.pyc
-maily/__pycache__/classifier.cpython-314.pyc
-maily/__pycache__/cli.cpython-314.pyc
-maily/__pycache__/config.cpython-314.pyc
-maily/__pycache__/db.cpython-314.pyc
-maily/__pycache__/gmail.cpython-314.pyc
-maily/__pycache__/models.cpython-314.pyc
-maily/__pycache__/ollama.cpython-314.pyc
-maily/__pycache__/secrets.cpython-314.pyc
-maily/__pycache__/sync.cpython-314.pyc
-maily/__pycache__/tui.cpython-314.pyc
-tests/__pycache__/test_auth.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_auth.cpython-314.pyc
-tests/__pycache__/test_classifier.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_classifier.cpython-314.pyc
-tests/__pycache__/test_gmail.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_gmail.cpython-314.pyc
-tests/__pycache__/test_local_state.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_local_state.cpython-314.pyc
-tests/__pycache__/test_presentation.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_presentation.cpython-314.pyc
-tests/__pycache__/test_secrets.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_secrets.cpython-314.pyc
-tests/__pycache__/test_smoke.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_smoke.cpython-314.pyc
-tests/__pycache__/test_sync.cpython-314-pytest-9.1.1.pyc
-tests/__pycache__/test_sync.cpython-314.pyc
+package.json
 
+# Lock files
+pnpm-lock.yaml
+
+# Python lock files
 uv.lock
