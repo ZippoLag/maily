@@ -23,7 +23,7 @@ The TUI SHALL treat the currently highlighted/focused email in the tree as the a
 
 ### Requirement: Actions execute on focused email without explicit selection
 
-The TUI SHALL allow actions (Summarize, Mark, Edit Categories) to execute on the currently focused email without requiring the user to first press Space or perform any other selection toggle.
+The TUI SHALL allow actions (Summarize, Mark, Edit Categories) to execute on the currently focused email without requiring the user to first press Space or perform any other selection toggle. Marking SHALL be triggered by Enter or Space rather than the `m` key.
 
 #### Scenario: Summarize on focused email
 - **WHEN** user presses 'S' while an email is focused in the tree
@@ -31,7 +31,7 @@ The TUI SHALL allow actions (Summarize, Mark, Edit Categories) to execute on the
 - **AND** no "Select an email first" error is shown
 
 #### Scenario: Mark on focused email
-- **WHEN** user presses 'm' while an email is focused in the tree
+- **WHEN** user presses Enter or Space while an email is focused in the tree
 - **THEN** that email is toggled in the marked set
 - **AND** no "Select an email first" error is shown
 
@@ -40,6 +40,10 @@ The TUI SHALL allow actions (Summarize, Mark, Edit Categories) to execute on the
 - **THEN** the category edit modal opens for that email
 - **AND** no "Select an email first" error is shown
 
+#### Scenario: Single-mark key removed
+- **WHEN** user presses `m`
+- **THEN** the system performs no action (the binding is absent)
+
 ### Requirement: Bulk actions on marked emails
 
 The TUI SHALL apply actions to all marked emails when one or more emails are marked, rather than only the focused email.
@@ -47,7 +51,7 @@ The TUI SHALL apply actions to all marked emails when one or more emails are mar
 #### Scenario: Summarize multiple marked emails
 - **WHEN** user marks 3 emails and presses 'S'
 - **THEN** summaries are generated for all 3 marked emails
-- **AND** a digest or combined summary is displayed
+- **AND** a combined summary is displayed
 
 #### Scenario: Mark adds to existing marked set
 - **WHEN** user marks an email while other emails are already marked
@@ -57,6 +61,34 @@ The TUI SHALL apply actions to all marked emails when one or more emails are mar
 #### Scenario: No emails marked uses focused email
 - **WHEN** no emails are marked and user presses an action key
 - **THEN** the action applies to the currently focused email only
+
+### Requirement: Mark-all for the current date
+
+The TUI SHALL bind `Ctrl+M` to toggle the mark state of every email in the current date (the same date scope the digest uses), regardless of which rows are visible in the current scroll.
+
+#### Scenario: Toggle mark-all for the current date
+- **WHEN** the user presses `Ctrl+M`
+- **THEN** the system toggles the mark state for all emails in the current date
+
+#### Scenario: Mark-all applies beyond the visible scroll
+- **WHEN** the current date has emails outside the visible scroll region
+- **THEN** `Ctrl+M` toggles those emails too
+
+### Requirement: Unsupported modifier-key bindings removed
+
+The TUI SHALL NOT bind Shift+arrow key combinations to any action.
+
+#### Scenario: Shift+arrow does nothing
+- **WHEN** the user presses Shift combined with an arrow key
+- **THEN** the system performs no action (the binding is absent)
+
+### Requirement: Sorting explains itself
+
+The `s` (sort) action SHALL display a message explaining the current sorting logic before or while applying it, so the available ordering is always discoverable.
+
+#### Scenario: Sort shows its logic
+- **WHEN** the user presses `s`
+- **THEN** the system shows a message describing the current sorting rule and applies the sort
 
 ### Requirement: Visual indication of focused email
 
