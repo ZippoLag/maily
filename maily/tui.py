@@ -287,9 +287,12 @@ class BrowseApp(App):
 
         fingerprint = hash(f"{message_id}:{body}")
 
-        cached = self.database.get_summary(message_id, str(fingerprint))
-        if cached:
-            return cached
+        try:
+            cached = self.database.get_summary(message_id, str(fingerprint))
+            if cached:
+                return cached
+        except Exception:  # noqa: BLE001 - degrade on cache failure
+            pass
 
         summary_prompt = f"""Summarize this email in 2-3 sentences. Focus on action items, key information, and sender intent.
 
@@ -310,9 +313,12 @@ Summary:"""
             )
             if self._config.inference_enabled:
                 summary = provider.generate(summary_prompt)
-                self.database.store_summary(
-                    message_id, summary, self._config.ollama_model, str(fingerprint)
-                )
+                try:
+                    self.database.store_summary(
+                        message_id, summary, self._config.ollama_model, str(fingerprint)
+                    )
+                except Exception:  # noqa: BLE001 - degrade on cache failure
+                    pass
                 return summary
         except (ImportError, Exception):
             pass
@@ -322,7 +328,10 @@ Summary:"""
         else:
             summary = f"Preview: {body[:200]}... (truncated)"
 
-        self.database.store_summary(message_id, summary, "", str(fingerprint))
+        try:
+            self.database.store_summary(message_id, summary, "", str(fingerprint))
+        except Exception:  # noqa: BLE001 - degrade on cache failure
+            pass
         return summary
 
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
