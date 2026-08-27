@@ -205,7 +205,16 @@ def _item(mid="m0"):
     }
 
 
-def test_space_toggles_selection(tmp_path):
+def _first_email_node(tree):
+    """Return the first email node in the populated category."""
+    for category in tree.root.children:
+        for bucket in category.children:
+            for email in bucket.children:
+                return email
+    raise AssertionError("no email node found")
+
+
+def test_space_marks_email(tmp_path):
     config = load_config(tmp_path / "home")
     _seed_multi(config)
 
@@ -214,26 +223,70 @@ def test_space_toggles_selection(tmp_path):
         async with app.run_test() as pilot:
             await pilot.pause()
             app.selected_email = _item("m0")
-            app.action_toggle_select()
+            app.action_mark()
             assert len(app.selected_emails) == 1
-            app.action_toggle_select()
+            app.action_mark()
             assert len(app.selected_emails) == 0
 
     asyncio.run(exercise())
 
 
-def test_select_all_and_deselect_all_visible(tmp_path):
+def test_mark_all_current_date_and_clear(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
     config = load_config(tmp_path / "home")
     _seed_multi(config, count=3)
+    db = Database(config.database_file)
+    now = datetime.now(UTC)
+    today = now.isoformat()
+    yesterday = (now - timedelta(days=1)).isoformat()
+    # m0 today, m1 today, m2 yesterday
+    for mid, received in (("m0", today), ("m1", today), ("m2", yesterday)):
+        db.connection.execute(
+            "UPDATE messages SET received_at = ? WHERE id = ?", (received, mid)
+        )
+    db.connection.commit()
+    db.close()
 
     async def exercise():
         app = BrowseApp(config)
         async with app.run_test() as pilot:
             await pilot.pause()
-            app.action_select_all_visible()
-            assert len(app.selected_emails) >= 1
-            app.action_deselect_all()
+            app.action_mark_all_date()
+            marked_ids = {item["id"] for item in app.selected_emails}
+            assert "m0" in marked_ids
+            assert "m1" in marked_ids
+            assert "m2" not in marked_ids  # yesterday not in the current date scope
+            app.action_mark_all_date()
             assert app.selected_emails == []
+
+    asyncio.run(exercise())
+
+
+def test_mark_all_current_date_uses_digest_date_scope(tmp_path):
+    from datetime import UTC, datetime
+
+    config = load_config(tmp_path / "home")
+    _seed_multi(config, count=2)
+    db = Database(config.database_file)
+    now = datetime.now(UTC)
+    for mid in ("m0", "m1"):
+        db.connection.execute(
+            "UPDATE messages SET received_at = ? WHERE id = ?", (now.isoformat(), mid)
+        )
+    db.connection.commit()
+    db.close()
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # No emails marked yet; Ctrl+M marks every current-date email.
+            app.action_mark_all_date()
+            assert {item["id"] for item in app.selected_emails} == {"m0", "m1"}
+            # Tree nodes render with [x] for the marked rows.
+            node = _first_email_node(app.query_one("#tree"))
+            assert "[x]" in str(node.label)
 
     asyncio.run(exercise())
 

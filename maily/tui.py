@@ -163,6 +163,32 @@ def save_category_overrides(
             database.delete_user_override(message_id)
 
 
+def email_line_text(item: dict, marked: bool = False) -> str:
+    """Render a single email list row: `[ ]`/`[x]` mark, sender summary, subject.
+
+    The sender summary is the first sender address, prefixed with ``... `` when
+    the message has more than one sender. Returns plain text (no Rich markup);
+    callers add label badge markup separately.
+    """
+    subject = item.get("subject") or "(no subject)"
+    senders = item.get("senders") or ()
+    first_sender = ""
+    if senders:
+        first_sender = str(senders[0])
+    else:
+        first_sender = item.get("sender_email") or item.get("sender_name") or ""
+    if len(senders) > 1:
+        sender_summary = f"... {first_sender}"
+    else:
+        sender_summary = first_sender
+    return f"{mark_prefix(marked)}{sender_summary} {subject}".rstrip()
+
+
+def mark_prefix(marked: bool) -> str:
+    """Return the checkbox prefix for a row's mark state."""
+    return "[x] " if marked else "[ ] "
+
+
 def email_pane_text(item: dict, width: int = 80) -> str:
     """Compose sender/subject/body text for the reading pane, wrapping to *width*.
 
@@ -498,13 +524,12 @@ class BrowseApp(App):
         ("s", "sort", "Sort"),
         ("S", "summarize", "Summarize"),
         ("c", "edit_categories", "Edit categories"),
-        ("m", "mark", "Mark/Unmark"),
         ("p", "suggestions", "Rule suggestions"),
         ("d", "digest", "Digest view"),
-        ("space", "toggle_select", "Select/Unselect"),
-        ("ctrl+a", "select_all_visible", "Select all visible"),
-        ("ctrl+d", "deselect_all", "Deselect all"),
-        ("escape", "clear_selection", "Clear selection"),
+        ("space", "mark", "Mark/Unmark"),
+        ("enter", "mark", "Mark/Unmark"),
+        ("ctrl+m", "mark_all_date", "Mark/Unmark all today"),
+        ("escape", "clear_selection", "Clearing marks"),
         ("l", "filter_by_label", "Filter by label"),
         ("b", "batch_suggestions", "Batch suggestions"),
         ("u", "undo_batch", "Undo last batch"),
@@ -580,8 +605,8 @@ class BrowseApp(App):
     def _expand_group_nodes(self, node) -> None:
         """Expand category and date-bucket nodes so emails are visible.
 
-        Email nodes (which carry item data) stay collapsed: their sender and
-        body details load lazily when the user expands them.
+        Email nodes (which carry item data) are not expandable; the reading
+        pane shows a highlighted email's details.
         """
         for child in node.children:
             if child.data is None:
@@ -589,47 +614,20 @@ class BrowseApp(App):
                 self._expand_group_nodes(child)
 
     def _add_email_node(self, parent_node, item):
-        """Add an email node; sender/body details load lazily on first expand."""
-        from .models import primary_category
+        """Add a non-expandable email node using the standard line format."""
+        from rich.markup import escape
 
-        subject = item.get("subject") or "(no subject)"
-        sender_name = item.get("sender_name") or ""
-        sender_email = item.get("sender_email") or ""
-
-        sender_label = sender_name if sender_name else sender_email
-        categories = item.get("categories") or [item.get("category")]
-        primary = primary_category(categories)
-        badge_suffix = (
-            format_category_badges([c for c in categories if c != primary])
-            if primary
-            else ""
-        )
-        primary_prefix = f"[{primary}] " if primary else ""
         is_marked = item in self.selected_emails
-        mark_prefix = "[X] " if is_marked else "[ ] "
-        label_badges = format_label_badges(item.get("labels"))
-        email_node = parent_node.add(
-            f"{mark_prefix}{primary_prefix}{sender_label}: {subject}{badge_suffix}{label_badges}",
-            data=dict(item),
-        )
-        email_node.allow_expand = True
-
-    def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
-        """Lazily load sender/body details for an email node on first expand."""
-        node = event.node
-        if not node.data or node.children:
-            return
-        item = node.data
-        body = self.database.get_message_body(item["id"])
-        sender_name = item.get("sender_name") or "(unknown)"
-        sender_email = item.get("sender_email") or ""
-        node.add(f"[dim]From: {sender_name} <{sender_email}>[/dim]")
-        node.add(f"{(body or '(no body)').replace(chr(10), ' ')[:1000]}")
+        plain = escape(email_line_text(item, marked=is_marked))
+        badge_markup = format_label_badges(item.get("labels"))
+        email_node = parent_node.add(f"{plain}{badge_markup}", data=dict(item))
+        email_node.allow_expand = False
 
     def action_sort(self) -> None:
         self.sort_field = self.sort_fields[
             (self.sort_fields.index(self.sort_field) + 1) % len(self.sort_fields)
         ]
+        self.notify(f"Sorted by {self.sort_field}", title="Sort", timeout=3)
         self.status.update(f"Read-only browsing | sorted by {self.sort_field}")
         self.rebuild()
 
@@ -792,48 +790,14 @@ Summary:"""
     def action_end(self) -> None:
         self.query_one(Tree).scroll_end(animate=False)
 
-    def action_toggle_select(self) -> None:
-        """Toggle the focused email in the multi-select set (Space)."""
-        if not self.selected_email:
-            self.status.update("Select an email first to toggle")
-            return
-        item = self.selected_email
-        if item in self.selected_emails:
-            self.selected_emails.remove(item)
-            self.status.update(
-                f"Deselected {item.get('subject')} ({len(self.selected_emails)} selected)"
-            )
-        else:
-            self.selected_emails.append(item)
-            self.status.update(
-                f"Selected {item.get('subject')} ({len(self.selected_emails)} selected)"
-            )
-        self.rebuild()
-
-    def action_select_all_visible(self) -> None:
-        """Select every email currently visible in the tree viewport (Ctrl+A)."""
-        tree = self.query_one(Tree)
-        nodes = self._visible_email_nodes(tree)
-        if not nodes:
-            self.status.update("No emails visible to select")
-            return
-        before = len(self.selected_emails)
-        for node in nodes:
-            if node not in self.selected_emails:
-                self.selected_emails.append(node)
-        self.status.update(
-            f"Selected {len(self.selected_emails)} emails (was {before})"
-        )
-        self.rebuild()
-
     def action_deselect_all(self) -> None:
-        """Clear the multi-select set (Ctrl+D / Escape)."""
+        """Clear the marked set."""
         self.selected_emails = []
-        self.status.update("Cleared selection")
+        self.status.update("Cleared marks")
         self.rebuild()
 
     def action_clear_selection(self) -> None:
-        """Escape clears the multi-select set when no modal is open."""
+        """Escape clears the marked set when no modal is open."""
         self.action_deselect_all()
 
     def action_filter_by_label(self) -> None:
@@ -857,7 +821,7 @@ Summary:"""
     def action_batch_suggestions(self) -> None:
         """Open batch action suggestions for the current selection ('b')."""
         if not self.selected_emails:
-            self.status.update("Select emails first (Space, Ctrl+A) for suggestions")
+            self.status.update("Mark emails first (Space/Enter) for suggestions")
             return
         from .suggestions import cache_key, generate_suggestions
 
@@ -988,34 +952,75 @@ Summary:"""
         if item in self.selected_emails:
             self.selected_emails.remove(item)
             self.status.update(
-                f"Unmarked {item.get('subject')} ({len(self.selected_emails)} selected)"
+                f"Unmarked {item.get('subject')} ({len(self.selected_emails)} marked)"
             )
         else:
             self.selected_emails.append(item)
             self.status.update(
-                f"Marked {item.get('subject')} ({len(self.selected_emails)} selected)"
+                f"Marked {item.get('subject')} ({len(self.selected_emails)} marked)"
             )
         self.rebuild()
 
+    def _resolve_target_emails(self) -> list[dict]:
+        """Resolve the emails an action applies to: marked, else selected, else none.
+
+        Returns the marked set when any email is marked; otherwise the single
+        highlighted (selected) email; otherwise an empty list.
+        """
+        if self.selected_emails:
+            return list(self.selected_emails)
+        if self.selected_email:
+            return [self.selected_email]
+        return []
+
     def action_edit_categories(self) -> None:
-        """Open the category edit modal for the selected email(s)."""
-        if not self.selected_emails:
+        """Open the category edit modal for the marked, or selected, emails."""
+        targets = self._resolve_target_emails()
+        if not targets:
             self.status.update(
-                "Select an email first (press 'c' on it, 'm' to mark more)"
+                "No email to edit: mark or select one first (Enter/Space)"
             )
             return
-        first = self.selected_emails[0]
+        first = targets[0]
         override = self.database.get_user_override(first["id"])
         if override is not None:
             initial = override
         else:
             initial = list(first.get("categories") or [first.get("category")])
         self._edit_initial = initial
-        message_ids = [item["id"] for item in self.selected_emails]
+        message_ids = [item["id"] for item in targets]
         self.push_screen(
             CategoryEditModal(list(self.config.categories), initial, message_ids),
             self._on_categories_saved,
         )
+
+    def action_mark_all_date(self) -> None:
+        """Toggle the mark state of every email received today (Ctrl+M).
+
+        Uses the same "Today" date scope as the tree/digest. When any current
+        date email is unmarked this marks them all; otherwise it unmarks them all.
+        """
+        rows = self.database.categorized_messages()
+        today_items = [
+            row for row in rows if date_group_label(row["received_at"]) == "Today"
+        ]
+        if not today_items:
+            self.status.update("No emails today to mark")
+            return
+        all_marked = all(item in self.selected_emails for item in today_items)
+        if all_marked:
+            ids = {item["id"] for item in today_items}
+            self.selected_emails = [
+                item for item in self.selected_emails if item["id"] not in ids
+            ]
+            self.status.update(f"Unmarked all {len(today_items)} email(s) today")
+        else:
+            ids = {item["id"] for item in self.selected_emails}
+            for item in today_items:
+                if item["id"] not in ids:
+                    self.selected_emails.append(item)
+            self.status.update(f"Marked all {len(today_items)} email(s) today")
+        self.rebuild()
 
     def _on_categories_saved(self, result) -> None:
         """Persist modal results, refresh the tree, and notify the user."""

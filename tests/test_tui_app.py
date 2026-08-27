@@ -155,7 +155,7 @@ def test_tree_does_not_load_bodies_upfront(tmp_path):
     asyncio.run(exercise())
 
 
-def test_expanding_email_loads_body_lazily(tmp_path):
+def test_email_nodes_are_not_expandable(tmp_path):
     config = load_config(tmp_path / "home")
     _seed(config)
 
@@ -165,13 +165,58 @@ def test_expanding_email_loads_body_lazily(tmp_path):
             tree = app.query_one("#tree")
             await pilot.pause()
             email_node = _first_email_node(tree)
-            assert len(email_node.children) == 0
+            assert email_node is not None
+            assert email_node.allow_expand is False
+            # Expanding the node adds no children (no lazy body load / triangles).
             email_node.expand()
             await pilot.pause()
-            assert len(email_node.children) == 2
-            body_text = "".join(str(child.label) for child in email_node.children)
-            assert "Body text" in body_text
-            assert "From:" in body_text
+            assert len(email_node.children) == 0
+
+    asyncio.run(exercise())
+
+
+def test_email_row_line_format(tmp_path):
+    from maily.tui import email_line_text
+
+    # Single sender, unmarked -> [ ] sender subject
+    assert (
+        email_line_text({"subject": "Hello", "sender_email": "alice@example.com"})
+        == "[ ] alice@example.com Hello"
+    )
+    # Multiple senders, marked -> [x] ... first subject
+    assert (
+        email_line_text(
+            {
+                "subject": "Update",
+                "senders": ["a@x.com", "b@x.com"],
+            },
+            marked=True,
+        )
+        == "[x] ... a@x.com Update"
+    )
+
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            tree = app.query_one("#tree")
+            await pilot.pause()
+            # Mark the real tree node's data object (the node stores a dict) so
+            # the row re-renders with the checkbox reflected via the helper.
+            node = _first_email_node(tree)
+            item = node.data
+            app.on_tree_node_highlighted(
+                SimpleNamespace(node=SimpleNamespace(data=item))
+            )
+            app.selected_emails = []
+            app.action_mark()
+            app.rebuild()
+            await pilot.pause()
+            marked_node = _first_email_node(tree)
+            assert "[x]" in str(marked_node.label)
+            assert "[ ]" not in str(marked_node.label)
 
     asyncio.run(exercise())
 
@@ -452,6 +497,66 @@ def test_suggestion_modal_dismisses_on_escape(tmp_path):
             app.screen.on_key(SimpleNamespace(key="escape"))
             await pilot.pause()
             assert not isinstance(app.screen, SuggestionModal)
+
+    asyncio.run(exercise())
+
+
+def test_resolve_target_emails_fallback_branches(tmp_path):
+    """Shared resolve helper: marked set wins, else selected, else none."""
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            marked = [{"id": "m1", "subject": "One"}, {"id": "m2", "subject": "Two"}]
+            selected = {"id": "m9", "subject": "Sel"}
+            # Marked set wins over the selected email.
+            app.selected_emails = marked
+            app.selected_email = selected
+            assert app._resolve_target_emails() == marked
+            # No marks -> the single selected email.
+            app.selected_emails = []
+            assert app._resolve_target_emails() == [selected]
+            # No marks and no selection -> empty.
+            app.selected_email = None
+            assert app._resolve_target_emails() == []
+
+    asyncio.run(exercise())
+
+
+def test_edit_categories_marked_selected_none(tmp_path):
+    """c applies to marked then selected emails and no-ops without a target."""
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # No target: no-op, no modal opens.
+            app.selected_email = None
+            app.selected_emails = []
+            app.action_edit_categories()
+            await pilot.pause()
+            assert not isinstance(app.screen, CategoryEditModal)
+            # Only a selection -> opens modal targeting that email.
+            app.selected_email = _item()
+            app.action_edit_categories()
+            await pilot.pause()
+            assert isinstance(app.screen, CategoryEditModal)
+            assert "m1" in app.screen.message_ids
+            app.screen.on_key(SimpleNamespace(key="escape"))
+            await pilot.pause()
+            # Marked emails take precedence when both are present.
+            app.selected_emails = [{**_item(), "id": "m2", "subject": "Two"}]
+            app.action_edit_categories()
+            await pilot.pause()
+            assert isinstance(app.screen, CategoryEditModal)
+            assert app.screen.message_ids == ["m2"]
+            app.screen.on_key(SimpleNamespace(key="escape"))
+            await pilot.pause()
 
     asyncio.run(exercise())
 
