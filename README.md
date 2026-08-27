@@ -192,13 +192,9 @@ After installing the `tui` extra, launch:
 maily tui
 ```
 
-### Email Expansion
+### Reading Pane
 
-Navigate to an email in the tree and press **Enter** to expand it. Expanded emails show:
-- Sender information (name and email address)
-- Email body content
-
-Use **Enter** again to collapse the email.
+Highlight an email in the tree and its sender, subject, and body render in the reading pane on the right. There is no separate expand/collapse step — the selected email's content is always visible, and **Enter**/**Space** mark the highlighted email for batch operations.
 
 ### Email Summary
 
@@ -209,14 +205,16 @@ Select an email and press **S** (Shift+s) to generate a summary. Summaries are:
 
 Summaries are displayed in a modal window. Press **Escape** to close the modal.
 
-### Multi-Select
+### Multi-Select (Marking)
 
-Select multiple emails to act on them together:
-- **Space** toggles the focused email in the selection set
-- **Ctrl+A** selects every email visible in the current viewport
-- **Ctrl+D** (or **Escape** with no modal open) clears the selection
-- Selected emails show a `[X]` checkbox prefix; the status bar shows the running count
-- Selection survives scrolling and re-sorting
+Mark multiple emails to act on them together:
+- **Enter** or **Space** toggles the focused email's `[x]` mark
+- **Ctrl+M** marks (or unmarks) every email in the current date at once
+- **Escape** (with no modal open) clears the marks
+- Marked emails show a `[x]` checkbox prefix; the status bar shows the running count
+- Marks survive scrolling and re-sorting
+
+"Selection" means the email the cursor currently highlights; "marking" is the `[x]`-checked set. Actions operate on all marked emails, falling back to the highlighted email when nothing is marked.
 
 ### Category Editing
 
@@ -250,7 +248,7 @@ Suggestions persist across sessions until you act on them. Rule learning is full
 
 ### Large Result Sets
 
-With thousands of emails, the tree groups each category by date (Today, Yesterday, Last Week, then month), shows the total count in the tree header, and paints lazily so navigation stays responsive. Email bodies are loaded from the database only when you expand the email. A progress bar is shown while the view loads.
+With thousands of emails, the tree groups each category by date (Today, Yesterday, Last Week, then month), shows the total count in the tree header, and paints lazily so navigation stays responsive. A progress bar is shown while the view loads.
 
 ### View Digest
 
@@ -263,20 +261,18 @@ Press **d** to summarize the emails currently visible in the tree: a count, a br
 | `q` | Quit |
 | `s` | Change sort order |
 | `S` | Summarize selected email |
-| `c` | Edit categories for selected email(s) |
-| `m` | Mark/unmark selected email for batch editing |
+| `c` | Edit categories for marked email(s) (or focused if none marked) |
 | `p` | Review pending rule suggestions |
 | `d` | Digest the currently visible emails |
-| `Space` | Select/unselect focused email |
-| `Ctrl+A` | Select all visible emails |
-| `Ctrl+D` | Deselect all |
+| `Space` / `Enter` | Mark/unmark focused email |
+| `Ctrl+M` | Mark/unmark all emails in the current date |
+| `Escape` | Clear marks (when no modal is open) |
 | `l` | Filter by focused email's label |
 | `b` | Batch action suggestions |
 | `u` | Undo last batch categorization |
 | `i` | View pending mutation intents |
 | `Page Up` / `Page Down` | Scroll by one page |
 | `Home` / `End` | Jump to the first / last email |
-| `Enter` | Expand/collapse email |
 | `Escape` | Close modal / clear selection |
 
 
