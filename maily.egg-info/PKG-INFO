@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: maily
-Version: 0.3.0
+Version: 0.4.0
 Summary: A local Gmail triage assistant
 Requires-Python: >=3.11
 Provides-Extra: gmail
@@ -12,3 +12,7 @@ Provides-Extra: tui
 Requires-Dist: textual>=0.80.0; extra == "tui"
 Provides-Extra: dev
 Requires-Dist: pytest>=8.3.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
+Requires-Dist: ruff>=0.9.0; extra == "dev"
+Requires-Dist: mypy>=1.14.0; extra == "dev"
+Requires-Dist: textual>=0.80.0; extra == "dev"

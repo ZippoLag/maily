@@ -110,9 +110,43 @@ Persistent scan defaults can be set in `~/.maily/config.toml` under `[scan]`; CL
 date_range = "last 30 days"   # "last 7 days", "this month", "2024-01-01:2024-01-31"
 include_read = false          # set true to include already-read emails
 chunk_size = "day"            # day | week | month | year
+long_running = false          # lock against concurrent scans, save progress on interrupt
+batch_size = 100              # emails per classify/commit batch
+checkpoint_emails = 100       # save progress after every N emails
+max_retries = 5               # Gmail rate-limit retries
+
+[performance]
+# memory_limit_mb = 1024      # warn when RSS approaches this limit
+# body_cache_size = 500       # LRU cache for lazily loaded bodies
+
+[suggestions]
+# confidence_threshold = 0.0  # only show batch suggestions at/above this confidence
 ```
 
 Invalid date ranges and unknown chunk sizes are rejected with a clear error when the config loads, so existing configurations without a `[scan]` section keep working unchanged.
+
+## Long-Running Scans
+
+For large backlogs, scan any date range and keep going overnight:
+
+```sh
+maily scan --last 30days --include-read --long-running
+maily scan --start-date 2024-01-01 --end-date 2024-06-30 --verbose
+```
+
+- `--last N(days|weeks|months|years)` and `--start-date`/`--end-date` select the window
+- `--include-read` fetches already-read mail as well
+- `--long-running` prevents concurrent scans with a lock file and saves progress on interrupt (Ctrl+C) so the next scan resumes where it stopped
+- `--verbose`/`--debug` increase progress verbosity (rate, ETA, per-chunk detail)
+- `--batch-size N` controls how many emails are classified and committed per batch
+
+Progress prints to stderr during the scan and mirrors to JSON Lines at `~/.maily/logs/scan_progress.jsonl`; scan errors append to `~/.maily/logs/scan_errors.log`.
+
+### Progress and resilience
+
+- Progress is checkpointed every `checkpoint_emails` (default 100) into the `sync_state` table; `maily status` reports it and `maily status --reset` clears it
+- A failed chunk does not abort the scan: the error is classified (network/quota/unknown), reported, and remaining chunks still process — the scan finishes `degraded` with a partial result
+- Gmail rate limits (429 / `rateLimitExceeded`) are retried with jittered exponential backoff up to `max_retries`; quota exhaustion stops gracefully with a clear message
 
 By default, local inference is disabled to minimize resource usage. To enable it, add the following to your `config.toml`:
 
@@ -238,6 +272,8 @@ Press **d** to summarize the emails currently visible in the tree: a count, a br
 | `Ctrl+D` | Deselect all |
 | `l` | Filter by focused email's label |
 | `b` | Batch action suggestions |
+| `u` | Undo last batch categorization |
+| `i` | View pending mutation intents |
 | `Page Up` / `Page Down` | Scroll by one page |
 | `Home` / `End` | Jump to the first / last email |
 | `Enter` | Expand/collapse email |

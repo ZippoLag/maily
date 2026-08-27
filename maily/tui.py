@@ -376,38 +376,80 @@ class CategoryEditModal(ModalScreen):
                 self.dismiss(None)
 
 
+class IntentsModal(ModalScreen):
+    """Modal listing pending mutation intents."""
+
+    def __init__(self, lines, app):
+        super().__init__()
+        self.lines = lines
+        self.app = app
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(*self.lines)
+
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+
+
+def _confidence_label(confidence: float) -> str:
+    """Render a confidence score as a colored label (High/Medium/Low)."""
+    if confidence >= 0.8:
+        return f"[green]High ({confidence:.0%})[/]"
+    if confidence >= 0.5:
+        return f"[yellow]Medium ({confidence:.0%})[/]"
+    return f"[gray]Low ({confidence:.0%})[/]"
+
+
 class BatchSuggestionsModal(ModalScreen):
     """Modal listing batch action suggestions for the current selection."""
 
-    def __init__(self, suggestions, selected_emails, app):
+    app: BrowseApp
+
+    def __init__(
+        self, suggestions, selected_emails, app, filter_type: str | None = None
+    ):
         super().__init__()
         self.suggestions = suggestions
         self.selected_emails = selected_emails
         self.app = app
+        self.filter_type = filter_type
+        self.undo_snapshot: dict[str, list[str] | None] = {}
+
+    def _visible(self) -> list:
+        if not self.filter_type:
+            return self.suggestions
+        return [s for s in self.suggestions if s.action == self.filter_type]
 
     def compose(self) -> ComposeResult:
+        visible = self._visible()
         lines = [
             Static("Batch Action Suggestions", classes="modal-title"),
             Static(
-                f"{len(self.selected_emails)} email(s) selected.",
+                f"{len(self.selected_emails)} email(s) selected."
+                + (f"  (filtered: {self.filter_type})" if self.filter_type else ""),
                 classes="modal-hint",
             ),
         ]
-        if not self.suggestions:
+        if not visible:
             lines.append(Static("No suggestions for this selection."))
-        for index, suggestion in enumerate(self.suggestions):
+        for index, suggestion in enumerate(visible):
             label = suggestion.description
+            count = len(suggestion.email_ids or ())
+            affected = f" ({count} emails)" if count else ""
             if suggestion.requires_write:
-                label += "  (read-only: needs Gmail write access)"
+                label += "  (read-only: queued as intent)"
             lines.append(
                 Static(
-                    f"{index + 1}. {label} — confidence {suggestion.confidence:.0%}",
+                    f"{index + 1}. {label}{affected} — "
+                    f"{_confidence_label(suggestion.confidence)}",
                     classes="modal-content",
                 )
             )
         lines.append(
             Static(
-                "Press a number to apply a categorize suggestion; Escape to close.",
+                "Number: apply categorize / queue mutation · f: filter · a: accept all "
+                "· Escape: close",
                 classes="modal-hint",
             )
         )
@@ -417,15 +459,31 @@ class BatchSuggestionsModal(ModalScreen):
         if event.key == "escape":
             self.dismiss(None)
             return
+        visible = self._visible()
+        if event.key == "f":
+            order = [None, "categorize", "archive", "delete", "mark-read"]
+            current = order.index(self.filter_type) if self.filter_type in order else 0
+            self.filter_type = order[(current + 1) % len(order)]
+            self.refresh(recompose=True)
+            return
+        if event.key == "a":
+            for suggestion in visible:
+                if (
+                    not suggestion.requires_write
+                    and suggestion.action == "categorize"
+                    and suggestion.category
+                ):
+                    self.app._apply_batch_categorization(
+                        suggestion, list(suggestion.email_ids)
+                    )
+            self.dismiss(None)
+            return
         if event.key.isdigit() and event.key != "0":
             index = int(event.key) - 1
-            if 0 <= index < len(self.suggestions):
-                suggestion = self.suggestions[index]
+            if 0 <= index < len(visible):
+                suggestion = visible[index]
                 if suggestion.requires_write:
-                    self.app.notify(
-                        f"{suggestion.action} needs Gmail write access (read-only)",
-                        title="Batch",
-                    )
+                    self.app._queue_mutation_intent(suggestion)
                     return
                 if suggestion.action == "categorize" and suggestion.category:
                     self.dismiss((suggestion, list(suggestion.email_ids)))
@@ -449,6 +507,8 @@ class BrowseApp(App):
         ("escape", "clear_selection", "Clear selection"),
         ("l", "filter_by_label", "Filter by label"),
         ("b", "batch_suggestions", "Batch suggestions"),
+        ("u", "undo_batch", "Undo last batch"),
+        ("i", "view_intents", "View pending intents"),
         ("pageup", "page_up", "Page Up"),
         ("pagedown", "page_down", "Page Down"),
         ("home", "home", "Home"),
@@ -466,7 +526,9 @@ class BrowseApp(App):
             "sender_name",
             "sender_domain",
         ]
-        self.database = Database(config.database_file)
+        self.database = Database(
+            config.database_file, body_cache_size=config.performance_body_cache_size
+        )
         self.status = Static("Read-only browsing")
         self.reading_pane = Static("Select an email to read.", id="reading-pane")
         self.selected_email = None
@@ -475,6 +537,9 @@ class BrowseApp(App):
         self._label_filter: str | None = None
         self._digest_cache: dict[tuple, str] = {}
         self._suggestion_cache: dict[tuple, list] = {}
+        self._batch_undo_snapshot: tuple[list[str], list[list[str] | None]] | None = (
+            None
+        )
 
     def on_mount(self) -> None:
         self.rebuild()
@@ -812,7 +877,11 @@ Summary:"""
                     infer = provider.generate
                 except Exception:  # noqa: BLE001, S110 - fall back to deterministic
                     pass
-            suggestions = generate_suggestions(list(self.selected_emails), infer=infer)
+            suggestions = generate_suggestions(
+                list(self.selected_emails),
+                infer=infer,
+                confidence_threshold=self.config.suggestions_confidence_threshold,
+            )
             self._suggestion_cache[key] = suggestions
         self.push_screen(
             BatchSuggestionsModal(suggestions, self.selected_emails, self),
@@ -827,13 +896,71 @@ Summary:"""
         if suggestion.action == "categorize":
             self._apply_batch_categorization(suggestion, message_ids)
 
+    def _queue_mutation_intent(self, suggestion) -> None:
+        """Queue an accepted mutation suggestion as a pending intent."""
+        self.database.save_mutation_intent(
+            action=suggestion.action,
+            message_ids=list(suggestion.email_ids or ()),
+            target=suggestion.target,
+            description=suggestion.description,
+        )
+        self.notify(
+            f"Queued '{suggestion.action}' for {len(suggestion.email_ids or ())} "
+            "email(s) as a pending intent (needs Gmail write access)",
+            title="Batch",
+        )
+
+    def action_view_intents(self) -> None:
+        """Show pending mutation intents in a modal ('i')."""
+        intents = self.database.list_mutation_intents()
+        if not intents:
+            self.status.update("No pending mutation intents")
+            return
+        lines = [Static("Pending Mutation Intents", classes="modal-title")]
+        for intent in intents:
+            lines.append(
+                Static(
+                    f"#{intent['id']} {intent['action']}: {intent['description']} "
+                    f"({len(intent['message_ids'])} emails)",
+                    classes="modal-content",
+                )
+            )
+        lines.append(Static("Press Escape to close.", classes="modal-hint"))
+        self.push_screen(IntentsModal(lines, self))
+
+    def action_undo_batch(self) -> None:
+        """Restore category overrides from before the last batch apply ('u')."""
+        snapshot = getattr(self, "_batch_undo_snapshot", None)
+        if not snapshot:
+            self.status.update("Nothing to undo")
+            return
+        message_ids, previous = snapshot
+        for message_id, previous_categories in zip(message_ids, previous):
+            if previous_categories:
+                self.database.set_user_override(message_id, previous_categories)
+            else:
+                self.database.delete_user_override(message_id)
+        self._batch_undo_snapshot = None
+        self.rebuild()
+        self.notify(
+            f"Undid batch categorization for {len(message_ids)} email(s)", title="Batch"
+        )
+
     def _apply_batch_categorization(self, suggestion, message_ids: list[str]) -> None:
         """Apply a categorize suggestion to the target emails, reporting failures."""
+        previous = [
+            self.database.get_user_override(message_id) for message_id in message_ids
+        ]
         failures: list[str] = []
         try:
             save_category_overrides(self.database, message_ids, [suggestion.category])
         except Exception as exc:  # noqa: BLE001 - surface partial failure
             failures.append(str(exc))
+        for message_id in message_ids:
+            self.database.record_action(
+                message_id, "batch-categorize", {"category": suggestion.category}
+            )
+        self._batch_undo_snapshot = (list(message_ids), previous)
         self.rebuild()
         if failures:
             self.notify(f"Categorized with {len(failures)} failure(s)", title="Batch")

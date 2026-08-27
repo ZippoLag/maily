@@ -1,10 +1,50 @@
 from __future__ import annotations
 
+import json
 import sys
 import time
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 
 LEVELS = (1, 2, 3)
+
+
+def memory_usage_mb() -> float:
+    """Return current process RSS in MB (0.0 when the platform cannot report it)."""
+    try:
+        import resource
+
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+    except (ImportError, AttributeError):  # pragma: no cover - platform dependent
+        return 0.0
+
+
+def warn_on_memory(memory_limit_mb: int | None) -> str | None:
+    """Return a warning when RSS crosses 80% of *memory_limit_mb* (or None)."""
+    if not memory_limit_mb or memory_limit_mb <= 0:
+        return None
+    current = memory_usage_mb()
+    if current <= 0:
+        return None
+    if current >= memory_limit_mb * 0.8:
+        return (
+            f"Memory warning: {current:.0f}MB used, limit is {memory_limit_mb}MB "
+            "(consider reducing scan.batch_size)"
+        )
+    return None
+
+
+class JsonlLogger:
+    """Append structured JSON-lines entries to a log file."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+    def log(self, **fields) -> None:
+        entry = {"ts": datetime.now(UTC).isoformat(), **fields}
+        with self.path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(entry, sort_keys=True) + "\n")
 
 
 def format_eta(seconds: float) -> str:
