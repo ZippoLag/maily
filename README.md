@@ -12,20 +12,42 @@ Requires Python 3.11 or newer.
 
 ### Installation Options
 
-#### Using a virtual environment (recommended)
+The fastest way to install maily is the single-script installer, which
+auto-detects your OS, checks for a compatible Python, and installs with all
+extras into a virtual environment at `~/.venv/maily`:
+
+```sh
+./install.sh
+```
+
+To install via pipx instead of a virtual environment:
+
+```sh
+./install.sh --pipx
+```
+
+Run `./install.sh --help` for all available options.
+
+### Advanced: Manual Installation
+
+Prefer to install by hand? The installer relies on the same steps shown here.
+The safest approach is a dedicated virtual environment:
+
 ```sh
 python3 -m venv ~/.venv/maily
 source ~/.venv/maily/bin/activate
 pip install -e '.[gmail,secure,tui]'
 ```
 
-#### Using pipx (for CLI-only installation)
+To install maily for the current user with pipx instead:
+
 ```sh
-brew install pipx
+brew install pipx   # on macOS
 pipx install -e '.[gmail,secure,tui]'
 ```
 
-#### System-wide install (not recommended on macOS with Homebrew Python)
+A system-wide install (not recommended on macOS with Homebrew Python):
+
 ```sh
 python3 -m pip install --break-system-packages -e '.[gmail,secure,tui]'
 ```
