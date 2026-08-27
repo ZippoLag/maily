@@ -75,6 +75,37 @@ def save_category_overrides(
             database.delete_user_override(message_id)
 
 
+def email_pane_text(item: dict, width: int = 80) -> str:
+    """Compose sender/subject/body text for the reading pane, wrapping to *width*.
+
+    Preserves stored paragraph breaks.  Returns '(no body)' when the body is
+    empty or missing.
+    """
+    import textwrap
+
+    sender_name = item.get("sender_name") or ""
+    sender_email = item.get("sender_email") or ""
+    subject = item.get("subject") or "(no subject)"
+    body = item.get("body") or ""
+
+    header = f"From: {sender_name} <{sender_email}>\nSubject: {subject}"
+
+    if not body:
+        return f"{header}\n\n(no body)"
+
+    # Wrap each paragraph independently, then rejoin with blank lines.
+    paragraphs = body.split("\n")
+    wrapped_parts: list[str] = []
+    for para in paragraphs:
+        if para.strip() == "":
+            wrapped_parts.append("")  # preserve blank-line paragraph break
+        else:
+            wrapped_parts.append(textwrap.fill(para, width=width))
+    wrapped_body = "\n".join(wrapped_parts)
+
+    return f"{header}\n\n{wrapped_body}"
+
+
 class SummaryModal(ModalScreen):
     """Modal screen to display email summary."""
 
@@ -211,6 +242,7 @@ class BrowseApp(App):
         ]
         self.database = Database(config.database_file)
         self.status = Static("Read-only browsing")
+        self.reading_pane = Static("Select an email to read.", id="reading-pane")
         self.selected_email = None
         self.selected_emails: list[dict] = []
 
@@ -248,14 +280,6 @@ class BrowseApp(App):
         email_node = parent_node.add(
             f"{primary_prefix}{sender_label}: {subject}{badge_suffix}", data=dict(item)
         )
-
-        body = item.get("body", "") or "(no body)"
-        if isinstance(body, str):
-            body = body.replace("\n", " ")[:1000]
-        sender_display = f"From: {sender_name or '(unknown)'} <{sender_email}>"
-
-        email_node.add(f"[dim]{sender_display}[/dim]")
-        email_node.add(f"{body}")
 
         email_node.allow_expand = True
 
@@ -334,6 +358,11 @@ Summary:"""
             pass
         return summary
 
+    def _update_reading_pane(self, item: dict) -> None:
+        """Populate the reading pane with the selected email's content."""
+        width = self.reading_pane.size.width or 80
+        self.reading_pane.update(email_pane_text(item, width=width))
+
     def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         if event.node.data:
             item = event.node.data
@@ -342,9 +371,11 @@ Summary:"""
             )
             self.selected_email = item
             self.selected_emails = [item]
+            self._update_reading_pane(item)
         else:
             self.selected_email = None
             self.selected_emails = []
+            self.reading_pane.update("Select an email to read.")
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
         """Update focused email when the user navigates the tree."""
@@ -361,8 +392,10 @@ Summary:"""
                 self.status.update(
                     f"{item['sender_email']} | {item['subject']} | Categories: {categories_str}"
                 )
+            self._update_reading_pane(item)
         else:
             self.selected_email = None
+            self.reading_pane.update("Select an email to read.")
 
     def action_suggestions(self) -> None:
         """Open the rule suggestion review modal."""
@@ -434,8 +467,8 @@ Summary:"""
         yield Header()
         root = CategoryTree("Today's unread mail")
         yield root
+        yield self.reading_pane
         yield self.status
-        yield Static("Read-only browsing. Run maily scan to refresh data.")
         yield Footer()
 
 
