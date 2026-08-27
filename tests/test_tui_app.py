@@ -73,7 +73,7 @@ def test_browse_app_interactions(tmp_path):
             app.action_summarize()
             await pilot.pause()
             assert isinstance(app.screen, SummaryModal)
-            app.screen.dismiss(None)
+            app.screen.on_key(SimpleNamespace(key="escape"))
             await pilot.pause()
 
             # Suggestion modal: accept the pending suggestion, then dismiss.
@@ -289,7 +289,7 @@ def test_digest_hotkey_opens_modal_and_dismisses(tmp_path):
             await pilot.pause()
             assert isinstance(app.screen, DigestModal)
             assert "3 emails" in str(app.screen.digest_text)
-            app.screen.dismiss(None)
+            app.screen.on_key(SimpleNamespace(key="escape"))
             await pilot.pause()
             assert not isinstance(app.screen, DigestModal)
 
@@ -313,7 +313,7 @@ def test_digest_cached_for_same_view(tmp_path, monkeypatch):
             monkeypatch.setattr("maily.tui.generate_digest", fake_generate_digest)
             app.action_digest()
             await pilot.pause()
-            app.screen.dismiss(None)
+            app.screen.on_key(SimpleNamespace(key="escape"))
             await pilot.pause()
             app.action_digest()
             await pilot.pause()
@@ -342,7 +342,7 @@ def test_digest_view_change_generates_new_digest(tmp_path, monkeypatch):
             monkeypatch.setattr("maily.tui.generate_digest", fake_generate_digest)
             app.action_digest()
             await pilot.pause()
-            app.screen.dismiss(None)
+            app.screen.on_key(SimpleNamespace(key="escape"))
             await pilot.pause()
             # A different set of visible emails means a different view.
             app._visible_email_nodes = lambda tree: [{"id": "m0"}, {"id": "m1"}]
@@ -393,5 +393,106 @@ def test_tui_shows_progress_bar_during_rebuild(tmp_path):
             await pilot.pause()
             # Bar is hidden again once loading completes.
             assert bar.display is False
+
+    asyncio.run(exercise())
+
+
+def test_summary_modal_dismisses_on_escape(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            app.on_tree_node_selected(
+                SimpleNamespace(node=SimpleNamespace(data=_item()))
+            )
+            app.action_summarize()
+            await pilot.pause()
+            assert isinstance(app.screen, SummaryModal)
+            # Escape key closes the modal.
+            app.screen.on_key(SimpleNamespace(key="escape"))
+            await pilot.pause()
+            assert not isinstance(app.screen, SummaryModal)
+
+    asyncio.run(exercise())
+
+
+def test_digest_modal_dismisses_on_escape(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed_many(config, 3)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.action_digest()
+            await pilot.pause()
+            assert isinstance(app.screen, DigestModal)
+            # Escape key closes the modal.
+            app.screen.on_key(SimpleNamespace(key="escape"))
+            await pilot.pause()
+            assert not isinstance(app.screen, DigestModal)
+
+    asyncio.run(exercise())
+
+
+def test_suggestion_modal_dismisses_on_escape(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.action_suggestions()
+            await pilot.pause()
+            assert isinstance(app.screen, SuggestionModal)
+            # Escape key closes the modal.
+            app.screen.on_key(SimpleNamespace(key="escape"))
+            await pilot.pause()
+            assert not isinstance(app.screen, SuggestionModal)
+
+    asyncio.run(exercise())
+
+
+def test_category_edit_modal_dismisses_on_escape(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            app.on_tree_node_selected(
+                SimpleNamespace(node=SimpleNamespace(data=_item()))
+            )
+            app.action_edit_categories()
+            await pilot.pause()
+            assert isinstance(app.screen, CategoryEditModal)
+            # Escape key closes the modal without saving.
+            app.screen.on_key(SimpleNamespace(key="escape"))
+            await pilot.pause()
+            assert not isinstance(app.screen, CategoryEditModal)
+
+    asyncio.run(exercise())
+
+
+def test_category_edit_modal_saves_on_s(tmp_path):
+    config = load_config(tmp_path / "home")
+    _seed(config)
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            app.on_tree_node_selected(
+                SimpleNamespace(node=SimpleNamespace(data=_item()))
+            )
+            app.action_edit_categories()
+            await pilot.pause()
+            assert isinstance(app.screen, CategoryEditModal)
+            # 's' key saves and closes the modal.
+            app.screen.action_save()
+            await pilot.pause()
+            assert not isinstance(app.screen, CategoryEditModal)
 
     asyncio.run(exercise())

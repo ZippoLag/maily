@@ -177,6 +177,10 @@ class SummaryModal(ModalScreen):
             Static("Press Escape to close", classes="modal-hint"),
         )
 
+    def on_key(self, event) -> None:
+        if event.key == "escape":
+            self.dismiss(None)
+
 
 class DigestModal(ModalScreen):
     """Modal screen showing a digest of the currently visible emails."""
