@@ -13,6 +13,36 @@ from .models import EmailMessage
 
 READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 
+# Gmail system labels are internal bookkeeping, not user-created tags.
+_SYSTEM_LABEL_IDS = {
+    "INBOX",
+    "SPAM",
+    "TRASH",
+    "UNREAD",
+    "STARRED",
+    "IMPORTANT",
+    "SENT",
+    "DRAFT",
+    "CHAT",
+    "SCHEDULED",
+    "MAILING_LIST",
+}
+
+
+def _user_labels(label_ids: list[str]) -> tuple[str, ...]:
+    """Return the user-created labels from a Gmail labelIds list.
+
+    System labels (INBOX, SPAM, UNREAD, CATEGORY_*, ...) are excluded so only
+    user-created tags surface as badges.
+    """
+    result: list[str] = []
+    for label in label_ids or []:
+        if label in _SYSTEM_LABEL_IDS or label.startswith("CATEGORY_"):
+            continue
+        if label not in result:
+            result.append(label)
+    return tuple(result)
+
 
 class GmailClient(Protocol):
     def today_unread(self, start: datetime, end: datetime) -> list[EmailMessage]: ...
@@ -167,6 +197,7 @@ def parse_message(raw: dict[str, Any], is_spam: bool) -> EmailMessage:
         received_at=received,
         unread="UNREAD" in raw.get("labelIds", []),
         is_spam=is_spam,
+        labels=_user_labels(raw.get("labelIds", [])),
     )
 
 

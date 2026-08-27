@@ -21,7 +21,7 @@ def test_database_migrates_and_seeds_categories(tmp_path: Path):
     )
     assert (
         database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
-        == 3
+        == 4
     )
     database.close()
 
@@ -307,9 +307,12 @@ def test_existing_v1_database_migrates_without_data_loss(tmp_path: Path):
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'email_summaries'"
     ).fetchone()
     assert row is not None
+    # labels column added by v4 migration
+    labels_col = database.connection.execute("PRAGMA table_info(messages)").fetchall()
+    assert any(row["name"] == "labels" for row in labels_col)
     assert (
         database.connection.execute("SELECT version FROM schema_version").fetchone()[0]
-        == 3
+        == 4
     )
     database.close()
 

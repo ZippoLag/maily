@@ -21,10 +21,12 @@ class EmailMessage:
     unread: bool
     is_spam: bool
     importance: float | None = None
+    labels: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         result = asdict(self)
         result["received_at"] = self.received_at.isoformat()
+        result["labels"] = list(result["labels"])
         return result
 
 
