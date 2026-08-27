@@ -1,4 +1,9 @@
-## MODIFIED Requirements
+# tui/email-expansion Specification
+
+## Purpose
+Enables users to view email details (sender and body) by expanding email nodes in the TUI, addressing the current gap where navigating to emails does nothing.
+
+## Requirements
 
 ### Requirement: Email expansion on selection
 
@@ -11,6 +16,18 @@ The TUI SHALL display the sender and body content when a user selects (expands) 
 #### Scenario: Email already expanded
 - **WHEN** user selects an already-expanded email
 - **THEN** the pane refreshes with that email's details
+
+### Requirement: Expansion visual indication
+
+The TUI SHALL provide clear visual indication of which emails are expanded, using tree node expansion indicators (▼/▶ or similar).
+
+#### Scenario: Expanded email visual
+- **WHEN** an email is expanded
+- **THEN** the tree node shows an expanded indicator (e.g., ▼) and the content is visible below
+
+#### Scenario: Collapsed email visual
+- **WHEN** an email is collapsed
+- **THEN** the tree node shows a collapsed indicator (e.g., ▶) and only the subject is visible
 
 ### Requirement: Body content formatting
 
@@ -30,9 +47,31 @@ The TUI SHALL format email body content for readability, wrapping long lines to 
 
 #### Scenario: Empty body
 - **WHEN** an email has no body content
-- **THEN** the TUI displays "(no body)" or similar indicator
+- **THEN** the TUI displays \"(no body)\" or similar indicator
 
-## ADDED Requirements
+### Requirement: Sender display format
+
+The TUI SHALL display the sender information prominently when an email is expanded, showing both sender name and email address.
+
+#### Scenario: Sender with name and email
+- **WHEN** an email has both sender_name and sender_email
+- **THEN** the TUI displays \"From: Name <email@example.com>\"
+
+#### Scenario: Sender with only email
+- **WHEN** an email has only sender_email
+- **THEN** the TUI displays \"From: email@example.com\"
+
+### Requirement: Keyboard navigation for expansion
+
+The TUI SHALL support expanding and collapsing emails using standard keyboard navigation (Enter to expand, Enter again to collapse, or arrow keys).
+
+#### Scenario: Enter key expands
+- **WHEN** user presses Enter on a collapsed email
+- **THEN** the email expands to show details
+
+#### Scenario: Enter key collapses
+- **WHEN** user presses Enter on an expanded email
+- **THEN** the email collapses to hide details
 
 ### Requirement: Expanded email details pane
 
