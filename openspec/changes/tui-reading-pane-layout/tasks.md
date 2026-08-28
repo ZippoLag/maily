@@ -1,7 +1,7 @@
 ## 1. Fixed-height pane
 
-- [ ] 1.1 Assign the reading pane a fixed `height`/`max_height` and the tree `height=1fr` in `compose`, and verify a test asserts the pane height stays fixed while the tree expands
-- [ ] 1.2 Ensure long body content scrolls within the pane instead of growing it, and verify a test covers the long-content case
+- [x] 1.1 Assign the reading pane a fixed `height`/`max_height` and the tree `height=1fr` in `compose`, and verify a test asserts the pane height stays fixed while the tree expands
+- [x] 1.2 Ensure long body content scrolls within the pane instead of growing it, and verify a test covers the long-content case
 
 ## 2. Toggle visibility
 

@@ -540,6 +540,9 @@ class BatchSuggestionsModal(ModalScreen):
         self.focus()
 
 
+FIXED_PANE_HEIGHT = 10  # reading pane bottom strip height in lines
+
+
 class BrowseApp(App):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("q", "quit", "Quit"),
@@ -1067,7 +1070,14 @@ Summary:"""
     def compose(self) -> ComposeResult:
         yield Header()
         root = CategoryTree("Today's unread mail", id="tree")
+        # The email list takes all space above the fixed-height reading pane.
+        root.styles.height = "1fr"
         yield root
+        # Fixed bottom strip: the reading pane never grows past this height.
+        self.reading_pane.styles.height = FIXED_PANE_HEIGHT
+        self.reading_pane.styles.max_height = FIXED_PANE_HEIGHT
+        # Long bodies scroll inside the fixed strip instead of growing it.
+        self.reading_pane.styles.overflow_y = "auto"
         yield self.reading_pane
         yield self.status
         yield ProgressBar(id="load-progress", show_eta=False, show_percentage=True)
