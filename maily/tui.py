@@ -540,6 +540,9 @@ class BatchSuggestionsModal(ModalScreen):
         self.focus()
 
 
+FIXED_PANE_HEIGHT = 10  # reading pane bottom strip height in lines
+
+
 class BrowseApp(App):
     BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
         ("q", "quit", "Quit"),
@@ -552,6 +555,7 @@ class BrowseApp(App):
         ("enter", "mark", "Mark/Unmark"),
         ("ctrl+m", "mark_all_date", "Mark/Unmark all today"),
         ("escape", "clear_selection", "Clearing marks"),
+        ("r", "toggle_read_pane", "Toggle reading pane"),
         ("l", "filter_by_label", "Filter by label"),
         ("b", "batch_suggestions", "Batch suggestions"),
         ("u", "undo_batch", "Undo last batch"),
@@ -816,6 +820,10 @@ Summary:"""
         """Clear the marked set."""
         self.selected_emails = []
         self.status.update("Cleared marks")
+
+    def action_toggle_read_pane(self) -> None:
+        """Hide or show the reading pane so the list uses the full height."""
+        self.reading_pane.display = not self.reading_pane.display
         self.rebuild()
 
     def action_clear_selection(self) -> None:
@@ -1067,7 +1075,14 @@ Summary:"""
     def compose(self) -> ComposeResult:
         yield Header()
         root = CategoryTree("Today's unread mail", id="tree")
+        # The email list takes all space above the fixed-height reading pane.
+        root.styles.height = "1fr"
         yield root
+        # Fixed bottom strip: the reading pane never grows past this height.
+        self.reading_pane.styles.height = FIXED_PANE_HEIGHT
+        self.reading_pane.styles.max_height = FIXED_PANE_HEIGHT
+        # Long bodies scroll inside the fixed strip instead of growing it.
+        self.reading_pane.styles.overflow_y = "auto"
         yield self.reading_pane
         yield self.status
         yield ProgressBar(id="load-progress", show_eta=False, show_percentage=True)
