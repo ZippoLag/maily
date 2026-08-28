@@ -555,6 +555,7 @@ class BrowseApp(App):
         ("enter", "mark", "Mark/Unmark"),
         ("ctrl+m", "mark_all_date", "Mark/Unmark all today"),
         ("escape", "clear_selection", "Clearing marks"),
+        ("r", "toggle_read_pane", "Toggle reading pane"),
         ("l", "filter_by_label", "Filter by label"),
         ("b", "batch_suggestions", "Batch suggestions"),
         ("u", "undo_batch", "Undo last batch"),
@@ -819,6 +820,10 @@ Summary:"""
         """Clear the marked set."""
         self.selected_emails = []
         self.status.update("Cleared marks")
+
+    def action_toggle_read_pane(self) -> None:
+        """Hide or show the reading pane so the list uses the full height."""
+        self.reading_pane.display = not self.reading_pane.display
         self.rebuild()
 
     def action_clear_selection(self) -> None:

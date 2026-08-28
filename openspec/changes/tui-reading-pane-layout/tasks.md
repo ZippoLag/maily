@@ -5,7 +5,7 @@
 
 ## 2. Toggle visibility
 
-- [ ] 2.1 Add a toggle key binding and `action_toggle_read_pane` that hides/shows the reading pane, and verify a test asserts display flips and the list fills the screen when hidden
+- [x] 2.1 Add a toggle key binding and `action_toggle_read_pane` that hides/shows the reading pane, and verify a test asserts display flips and the list fills the screen when hidden
 
 ## 3. Full verification
 

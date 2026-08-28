@@ -53,3 +53,32 @@ def test_long_body_scrolls_within_fixed_pane(tmp_path):
             assert str(pane.styles.overflow_y).lower() in ("auto", "scroll")
 
     asyncio.run(exercise())
+
+
+def test_toggle_reading_pane_hides_and_shows(tmp_path):
+    config = load_config(tmp_path / "home")
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test(size=(100, 50)) as pilot:
+            # The toggle is a bound action.
+            assert any(b[1] == "toggle_read_pane" for b in app.BINDINGS)
+
+            pane = app.query_one("#reading-pane")
+            tree = app.query_one("#tree")
+            visible_tree_h = tree.size.height
+            assert pane.display  # visible by default
+
+            # Toggle off: pane hidden, list fills the screen.
+            app.action_toggle_read_pane()
+            await pilot.pause()
+            assert not pane.display
+            assert tree.size.height > visible_tree_h
+
+            # Toggle on: pane shown again.
+            app.action_toggle_read_pane()
+            await pilot.pause()
+            assert pane.display
+            assert tree.size.height == visible_tree_h
+
+    asyncio.run(exercise())
