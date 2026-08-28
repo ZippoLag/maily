@@ -6,8 +6,7 @@
 	"image": "mcr.microsoft.com/devcontainers/python:3-3.14-trixie",
 	"features": {
 		"ghcr.io/devcontainers/features/node:2": {},
-		"ghcr.io/devcontainers-extra/features/pnpm:2": {},
-		"ghcr.io/astral-sh/uv:latest": {}
+		"ghcr.io/devcontainers-extra/features/pnpm:2": {}
 	},
 	"customizations": {
 		"vscode": {
@@ -28,7 +27,7 @@
 	// "forwardPorts": [],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "git config core.hooksPath .githooks && uv sync --extra dev",
+	"postCreateCommand": "git config core.hooksPath .githooks && curl -LsSf https://astral.sh/uv/install.sh | sh && uv sync --extra dev",
 
 	// Configure tool-specific properties.
 	// "customizations": {},
