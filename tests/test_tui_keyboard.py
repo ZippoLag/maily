@@ -195,6 +195,22 @@ def test_action_edit_categories_uses_focused_email(tmp_path):
     asyncio.run(exercise())
 
 
+def test_l_label_filter_is_unbound(tmp_path):
+    """The `l` key must not be bound to filter-by-label (label filter removed)."""
+    config = load_config(tmp_path / "home")
+
+    async def exercise():
+        app = BrowseApp(config)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # No binding binds `l` to filter_by_label.
+            bound_keys = {b[0] for b in app.BINDINGS}
+            assert "l" not in bound_keys
+            assert not hasattr(app, "action_filter_by_label")
+
+    asyncio.run(exercise())
+
+
 def test_status_bar_shows_marked_count(tmp_path):
     """Status bar shows marked count when emails are marked."""
     config = load_config(tmp_path / "home")

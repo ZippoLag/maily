@@ -228,7 +228,7 @@ When multiple emails are selected, **c** applies the same category change to all
 
 ### Gmail Label Badges
 
-User-created Gmail labels render as colored badges next to each email in the tree (system labels like INBOX and SPAM are hidden). Long label lists are truncated with a `+N more` indicator. Press **l** to filter the view by the focused email's label; press **l** again to clear the filter.
+User-created Gmail labels render as colored badges next to each email in the tree (system labels like INBOX and SPAM are hidden). Long label lists are truncated with a `+N more` indicator.
 
 ### Batch Action Suggestions
 
@@ -267,7 +267,6 @@ Press **d** to summarize the emails currently visible in the tree: a count, a br
 | `Space` / `Enter` | Mark/unmark focused email |
 | `Ctrl+M` | Mark/unmark all emails in the current date |
 | `Escape` | Clear marks (when no modal is open) |
-| `l` | Filter by focused email's label |
 | `r` | Toggle the reading pane (show/hide) |
 | `b` | Batch action suggestions |
 | `u` | Undo last batch categorization |
