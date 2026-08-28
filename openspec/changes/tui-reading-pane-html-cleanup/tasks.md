@@ -9,4 +9,4 @@
 
 ## 3. Full verification
 
-- [ ] 3.1 Run the full gate: `ruff check`, `ruff format --check`, `mypy`, `pytest`, and `openspec validate --all` all pass
+- [x] 3.1 Run the full gate: `ruff check`, `ruff format --check`, `mypy`, `pytest`, and `openspec validate --all` all pass
