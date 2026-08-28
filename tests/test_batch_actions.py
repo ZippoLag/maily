@@ -307,23 +307,6 @@ def test_selection_persists_across_sort(tmp_path):
     asyncio.run(exercise())
 
 
-def test_filter_by_label_toggles(tmp_path):
-    config = load_config(tmp_path / "home")
-    _seed_multi(config)
-
-    async def exercise():
-        app = BrowseApp(config)
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            app.selected_email = _item("m1")
-            app.action_filter_by_label()
-            assert app._label_filter == "Newsletter"
-            app.action_filter_by_label()
-            assert app._label_filter is None
-
-    asyncio.run(exercise())
-
-
 # ── Batch categorization (tasks 5.1-5.6, 7.6-7.7) ───────────────────────
 
 

@@ -556,7 +556,6 @@ class BrowseApp(App):
         ("ctrl+m", "mark_all_date", "Mark/Unmark all today"),
         ("escape", "clear_selection", "Clearing marks"),
         ("r", "toggle_read_pane", "Toggle reading pane"),
-        ("l", "filter_by_label", "Filter by label"),
         ("b", "batch_suggestions", "Batch suggestions"),
         ("u", "undo_batch", "Undo last batch"),
         ("i", "view_intents", "View pending intents"),
@@ -585,7 +584,6 @@ class BrowseApp(App):
         self.selected_email = None
         self.selected_emails: list[dict] = []
         self.email_count = 0
-        self._label_filter: str | None = None
         self._digest_cache: dict[tuple, str] = {}
         self._suggestion_cache: dict[tuple, list] = {}
         self._batch_undo_snapshot: tuple[list[str], list[list[str] | None]] | None = (
@@ -599,10 +597,6 @@ class BrowseApp(App):
         tree = self.query_one(Tree)
         tree.clear()
         rows = self.database.categorized_messages()
-        if self._label_filter:
-            rows = [
-                row for row in rows if self._label_filter in (row.get("labels") or ())
-            ]
         grouped = grouped_rows(rows, self.config.categories, self.sort_field)
         total_emails = sum(len(items) for items in grouped.values())
         self.email_count = total_emails
@@ -829,24 +823,6 @@ Summary:"""
     def action_clear_selection(self) -> None:
         """Escape clears the marked set when no modal is open."""
         self.action_deselect_all()
-
-    def action_filter_by_label(self) -> None:
-        """Toggle a label filter based on the focused email (press again to clear)."""
-        if self._label_filter:
-            self._label_filter = None
-            self.status.update("Label filter cleared")
-            self.rebuild()
-            return
-        if not self.selected_email:
-            self.status.update("Select an email first to filter by label")
-            return
-        labels = list(self.selected_email.get("labels") or ())
-        if not labels:
-            self.status.update("Focused email has no user labels to filter by")
-            return
-        self._label_filter = labels[0]
-        self.status.update(f"Filtered by label: {self._label_filter}")
-        self.rebuild()
 
     def action_batch_suggestions(self) -> None:
         """Open batch action suggestions for the current selection ('b')."""
