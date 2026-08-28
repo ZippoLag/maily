@@ -226,6 +226,9 @@ def email_pane_text(item: dict, width: int = 80) -> str:
     if not body:
         return f"{header}\n\n(no body)"
 
+    # Convert HTML bodies to clean Markdown/plain text before wrapping.
+    body = html_to_readable(body)
+
     # Wrap each paragraph independently, then rejoin with blank lines.
     paragraphs = body.split("\n")
     wrapped_parts: list[str] = []
