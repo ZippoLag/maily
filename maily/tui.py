@@ -189,6 +189,25 @@ def mark_prefix(marked: bool) -> str:
     return "[x] " if marked else "[ ] "
 
 
+def html_to_readable(body: str) -> str:
+    """Convert an HTML email body to readable Markdown/plain text.
+
+    Plain-text bodies pass through unchanged. HTML bodies are converted with
+    ``html2text``; if the converter is unavailable or conversion fails, the
+    original body is returned so the TUI keeps working and never shows raw
+    markup.
+    """
+    # Only attempt conversion when the body looks like HTML (contains tags).
+    if "<" not in body:
+        return body
+    try:
+        import html2text
+
+        return html2text.html2text(body)
+    except Exception:  # noqa: BLE001 - fall back on any conversion error
+        return body
+
+
 def email_pane_text(item: dict, width: int = 80) -> str:
     """Compose sender/subject/body text for the reading pane, wrapping to *width*.
 
@@ -206,6 +225,9 @@ def email_pane_text(item: dict, width: int = 80) -> str:
 
     if not body:
         return f"{header}\n\n(no body)"
+
+    # Convert HTML bodies to clean Markdown/plain text before wrapping.
+    body = html_to_readable(body)
 
     # Wrap each paragraph independently, then rejoin with blank lines.
     paragraphs = body.split("\n")
