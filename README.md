@@ -268,6 +268,7 @@ Press **d** to summarize the emails currently visible in the tree: a count, a br
 | `Ctrl+M` | Mark/unmark all emails in the current date |
 | `Escape` | Clear marks (when no modal is open) |
 | `l` | Filter by focused email's label |
+| `r` | Toggle the reading pane (show/hide) |
 | `b` | Batch action suggestions |
 | `u` | Undo last batch categorization |
 | `i` | View pending mutation intents |
